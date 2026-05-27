@@ -1,0 +1,1159 @@
+openapi: 3.0.1
+info:
+  title: LPI Platform API
+  description: |
+    Life Programmable Interface — goal registry, activity signals, and recommendation engine.
+    Powered by the SMILE methodology (Sense → Model → Intervene → Learn → Evolve).
+
+    ## Implementation Phases
+
+    | Phase | Scope |
+    |-------|-------|
+    | **Phase 1 (W1)** | In-memory storage, OpenAPI contract, test scaffolding |
+    | **Phase 2 (W2-W3)** | Supabase backend, JWT authentication, cross-stream signal ingestion |
+    | **Phase 3+ (W4-W5)** | Recommendation engine, agent orchestration (LangGraph), cross-stream integration |
+
+    ## Phase 1 Behaviour Notes
+
+    **user_id:** All Phase 1 routes assign `"default_user"` internally.
+    The field is not accepted in request bodies because it does not exist on
+    the Pydantic models (`GoalCreate`, `SignalCreate`). Phase 2 will extract
+    `user_id` from the JWT bearer token via middleware.
+
+    **POST status codes:** Both `POST /api/v1/goals/` and `POST /api/v1/signals/`
+    declare `201 Created`. FastAPI defaults to `200` unless the router decorator
+    sets `status_code=201` explicitly — Phase 2 task for Adil.
+
+    **SMILE validation:** Pydantic validates that a `smile_phase` value is a legal
+    enum member. Phase-transition logic (forward-only, no-skip, no-same-phase) is
+    enforced in the **FastAPI route handler**, not in Pydantic.
+
+    **Health timestamp:** `GET /health` currently returns only `status` and
+    `version`. The `timestamp` field in the schema is `nullable: true` so the
+    Phase 1 response remains valid against this contract.
+
+    **Authentication:** No auth in Phase 1. Phase 2 will introduce a JWT bearer
+    scheme; endpoints will be updated at that point.
+
+    ## Module 2 — Activity Signals (Adil, Phase 1 contract)
+
+    Six signal endpoints are fully specified in this contract:
+
+    | # | Endpoint | Filter |
+    |---|----------|--------|
+    | 1 | `POST /api/v1/signals/` | Ingest event |
+    | 2 | `GET /api/v1/signals/?user_id=X` | By owner |
+    | 3 | `GET /api/v1/signals/?stream=boardy` | By stream |
+    | 4 | `GET /api/v1/signals/?start_time=...&end_time=...` | By time range |
+    | 5 | `GET /api/v1/signals/?event_type=goal_created` | By event type |
+    | 6 | `GET /api/v1/signals/timeline/{user_id}` | Chronological timeline |
+
+    All filter params on `GET /api/v1/signals/` are combinable.
+    **Phase 1 implementation note:** time-range and timeline filtering will work
+    against the in-memory store; no DB index required until Phase 2.
+
+  version: 0.1.0
+  contact:
+    name: Jaivardhan Singh (LPI Lead)
+    email: jai@lifeatlas.online
+  license:
+    name: Internal — Life Atlas
+
+servers:
+  - url: http://localhost:8000
+    description: Local development (Phase 1)
+  - url: https://lpi-api.lifeatlas.online
+    description: Staging (Phase 2+)
+  - url: https://api.lifeatlas.online
+    description: Production (post-demo)
+
+tags:
+  - name: health
+    description: Service liveness and version probe
+  - name: goals
+    description: Goal / Intent Registry — CRUD with SMILE phase tracking
+  - name: signals
+    description: Activity Signals — ingest events from all streams
+  - name: recommendations
+    description: Recommendation Engine — goals + signals → suggested next actions
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── Health ─────────────────────────────────────────────────────────────────
+  /health:
+    get:
+      operationId: getHealth
+      tags:
+        - health
+      summary: Health check
+      description: |
+        Returns service liveness status and version string. Requires no
+        authentication. Used by CI smoke tests (`test_smoke.py::test_health`).
+
+        **Phase 1 Note:** The `timestamp` field in the response schema is marked
+        `nullable: true`. The current implementation (`main.py`) does not populate
+        it; Phase 2 will return a full ISO-8601 server timestamp.
+      responses:
+        '200':
+          description: Service is healthy and reachable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                version: "0.1.0"
+                timestamp: null
+
+  # ── Goals (collection) ─────────────────────────────────────────────────────
+  /api/v1/goals/:
+    post:
+      operationId: createGoal
+      tags:
+        - goals
+      summary: Create a new goal
+      description: |
+        Creates a goal with a title, optional description, priority (1–10), and an
+        initial SMILE phase.
+
+        **Status code:** Always `201 Created`. The FastAPI router decorator must
+        set `status_code=201`; tests must assert exactly `201` (Phase 2 task —
+        Adil).
+
+        **user_id:** Not accepted in the request body. The server assigns
+        `"default_user"` in Phase 1. Phase 2 middleware extracts it from the
+        JWT bearer token.
+
+        **SMILE validation:** Pydantic rejects values outside the `SmilePhase`
+        enum (→ 422). Phase-transition rules are irrelevant on creation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalCreate'
+            examples:
+              minimal:
+                summary: Minimal — only required field
+                value:
+                  title: "Learn Docker"
+              full:
+                summary: Full payload with all optional fields
+                value:
+                  title: "Master Agentic RAG"
+                  description: "Build AI systems combining retrieval and generation"
+                  priority: 9
+                  smile_phase: "sense"
+      responses:
+        '201':
+          description: Goal created. Always `201`, never `200`.
+          headers:
+            Location:
+              description: Canonical URL of the new goal.
+              schema:
+                type: string
+                example: /api/v1/goals/550e8400-e29b-41d4-a716-446655440000
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '400':
+          description: Malformed JSON or missing required field.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation failed — priority out of range or invalid `smile_phase` value.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+    get:
+      operationId: listGoals
+      tags:
+        - goals
+      summary: List goals with optional filtering
+      description: |
+        Returns all goals visible to the caller, sorted by `priority` descending
+        then `created_at` ascending.
+
+        **Phase 1:** All in-memory goals are returned regardless of `user_id`.
+        **Phase 2:** Row-Level Security (RLS) ensures users see only their own goals.
+        Pagination (`limit`, `offset`) and additional sorting options will also be
+        introduced in Phase 2.
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "default_user"
+          description: |
+            Filter results by goal owner. Pass `"default_user"` in Phase 1.
+            Phase 2 RLS makes this parameter redundant for non-admin callers.
+        - name: smile_phase
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SmilePhase'
+          description: Return only goals currently in this SMILE phase.
+        - name: min_priority
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            example: 5
+          description: Return only goals with `priority >= min_priority`.
+      responses:
+        '200':
+          description: Array of goals matching the supplied filters (may be empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Goal'
+              example:
+                - id: "550e8400-e29b-41d4-a716-446655440000"
+                  user_id: "default_user"
+                  title: "Learn Docker"
+                  description: "Containerize all my applications"
+                  priority: 7
+                  smile_phase: "sense"
+                  created_at: "2026-05-26T09:30:00Z"
+                  updated_at: "2026-05-26T09:30:00Z"
+
+  # ── Goals (item) ───────────────────────────────────────────────────────────
+  /api/v1/goals/{goal_id}:
+    get:
+      operationId: getGoal
+      tags:
+        - goals
+      summary: Retrieve a single goal by UUID
+      parameters:
+        - name: goal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+          description: UUID of the goal to retrieve.
+      responses:
+        '200':
+          description: Goal found and returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '404':
+          description: No goal exists with the supplied `goal_id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      operationId: updateGoal
+      tags:
+        - goals
+      summary: Partially update a goal (SMILE phase transitions enforced)
+      description: |
+        Updates one or more fields on an existing goal. All request fields are
+        optional; only supplied fields are modified.
+
+        **SMILE Phase Transition Rules (validated in the FastAPI route handler,
+        NOT by Pydantic):**
+
+        - Forward transitions allowed: one step at a time —
+          SENSE → MODEL → INTERVENE → LEARN → EVOLVE.
+        - Backward transitions allowed for re-evaluation: any phase may regress
+          to a prior phase (e.g. LEARN → SENSE is valid).
+        - Skip transitions are NOT allowed: jumping SENSE → INTERVENE (bypassing
+          MODEL) returns 422. Skipping any intermediate step is rejected.
+        - Updating a goal to the same phase it is already in is NOT allowed;
+          a same-phase transition returns 422.
+
+        Pydantic only validates that the supplied `smile_phase` value is a
+        recognised enum member. All transition logic lives in the route handler
+        (`routers/goals.py`), which calls `smile.validate_phase_transition`.
+
+        **Phase 2 additions:**
+        - Optimistic locking: `version` field required; 409 Conflict on mismatch.
+        - Audit log: every transition is recorded in `goal_transitions`.
+        - Recommendation re-scoring triggered on phase change.
+      parameters:
+        - name: goal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+          description: UUID of the goal to update.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoalUpdate'
+            examples:
+              advancePhase:
+                summary: Advance SMILE phase (SENSE → MODEL)
+                value:
+                  smile_phase: "model"
+              updateMeta:
+                summary: Update title and priority only
+                value:
+                  title: "Master Docker and Kubernetes"
+                  priority: 8
+      responses:
+        '200':
+          description: Goal updated and returned in its new state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '404':
+          description: No goal exists with the supplied `goal_id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: |
+            Validation failed. Possible causes:
+            - Illegal SMILE phase transition (skip or same-phase) — route handler.
+            - `priority` out of range 1–10 — Pydantic.
+            - `smile_phase` not a recognised enum member — Pydantic.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+    delete:
+      operationId: deleteGoal
+      tags:
+        - goals
+      summary: Permanently delete a goal
+      description: |
+        Removes a goal by UUID and returns a deletion confirmation object.
+
+        **Phase 2 consideration:** Replace with a soft-delete (`deleted_at`
+        timestamp) and cascade-mark associated signals and recommendations.
+        Log the deletion in an audit table.
+      parameters:
+        - name: goal_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+          description: UUID of the goal to delete.
+      responses:
+        '200':
+          description: Goal deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+              example:
+                deleted: true
+                id: "550e8400-e29b-41d4-a716-446655440000"
+        '404':
+          description: No goal exists with the supplied `goal_id`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ── Signals (collection) ───────────────────────────────────────────────────
+  /api/v1/signals/:
+    post:
+      operationId: ingestSignal
+      tags:
+        - signals
+      summary: Ingest an activity signal from any stream
+      description: |
+        Records an event emitted by one of the six recognised streams. Signals
+        represent user activity: matches made, deals closed, projects shipped, etc.
+
+        **Status code:** Always `201 Created`. FastAPI router decorator must set
+        `status_code=201` (Phase 2 task — Adil).
+
+        **user_id:** Not accepted in the request body (`SignalCreate` has no
+        `user_id` field). The server assigns `"default_user"` in Phase 1. Phase 2
+        middleware will populate it from the JWT bearer token.
+
+        **Recognised streams:**
+        - `boardy` — match recommendations, connections made
+        - `datapro` — datacenter deals, lead activity
+        - `vsab` — factory projects, production events
+        - `altiostar` — 5G optimisation events
+        - `security` — vulnerability findings, scan results
+        - `lpi_internal` — LPI system events (goal progress, phase transitions)
+
+        **Phase 2 additions:** stream whitelist validation, per-stream `event_type`
+        validation, rate limiting (1 000 signals/user/day), recommendation
+        re-scoring on ingestion.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalCreate'
+            examples:
+              boardyMatch:
+                summary: Boardy — match created
+                value:
+                  stream: "boardy"
+                  event_type: "match_created"
+                  payload:
+                    match_id: "m-123456"
+                    matched_with: "Aditi Mehta"
+                    reasoning: "Shared interest in AI agents"
+              lpiProgress:
+                summary: LPI internal — goal progress update
+                value:
+                  stream: "lpi_internal"
+                  event_type: "goal_progress"
+                  payload:
+                    goal_title: "Master Agentic RAG"
+                    progress_pct: 35
+                    next_step: "Complete LangGraph tutorial"
+      responses:
+        '201':
+          description: Signal ingested. Always `201`, never `200`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Signal'
+        '400':
+          description: Malformed JSON or missing required field (`stream` or `event_type`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation failed — unrecognised stream or event_type (Phase 2+).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+    get:
+      operationId: listSignals
+      tags:
+        - signals
+      summary: Query signals with optional filtering (user, stream, event type, time range)
+      description: |
+        Returns signals sorted by `timestamp` descending (newest first).
+        All filter parameters are optional and fully combinable — e.g. you can
+        filter by `stream=boardy` AND `start_time=...` AND `event_type=match_created`
+        in a single request.
+
+        **Supported filter combinations (Module 2 — Phase 1 contract):**
+
+        | Use case | Query params |
+        |----------|-------------|
+        | By owner | `?user_id=default_user` |
+        | By stream | `?stream=boardy` |
+        | By event type | `?event_type=match_created` |
+        | By time range | `?start_time=2026-05-01T00:00:00Z&end_time=2026-05-31T23:59:59Z` |
+        | Combined | `?stream=boardy&start_time=...&end_time=...` |
+
+        **Phase 1 implementation note:** filtering runs against the in-memory
+        store using Python comparisons on `datetime` objects — no DB index needed.
+
+        **Phase 2 additions:** RLS enforcement, pagination (`limit`/`offset`),
+        composite index on `(user_id, timestamp DESC)`.
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "default_user"
+          description: Filter by signal owner. Pass `"default_user"` in Phase 1.
+        - name: stream
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "boardy"
+          description: Filter by source stream identifier.
+        - name: event_type
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "match_created"
+          description: Filter by event type within the stream.
+        - name: start_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: "2026-05-01T00:00:00Z"
+          description: |
+            Return only signals with `timestamp >= start_time`.
+            Must be a valid ISO-8601 datetime string (UTC recommended).
+            If omitted, no lower bound is applied.
+        - name: end_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: "2026-05-31T23:59:59Z"
+          description: |
+            Return only signals with `timestamp <= end_time`.
+            Must be a valid ISO-8601 datetime string (UTC recommended).
+            If omitted, no upper bound is applied.
+            Must be >= `start_time` if both are provided; returns 400 otherwise.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 500
+            example: 50
+          description: Maximum number of signals to return (default 50, max 500).
+      responses:
+        '200':
+          description: Array of signals matching the supplied filters (may be empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Signal'
+              example:
+                - id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  user_id: "default_user"
+                  stream: "boardy"
+                  event_type: "match_created"
+                  payload:
+                    match_id: "m-123456"
+                    matched_with: "Aditi Mehta"
+                  timestamp: "2026-05-15T10:30:00Z"
+        '400':
+          description: |
+            Bad query parameters — e.g. `end_time` is earlier than `start_time`,
+            or a datetime string is not parseable as ISO-8601.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ── Signals (timeline) ─────────────────────────────────────────────────────
+  /api/v1/signals/timeline/{user_id}:
+    get:
+      operationId: getSignalTimeline
+      tags:
+        - signals
+      summary: Get chronological activity timeline for a user
+      description: |
+        Returns the complete activity history for a given user, sorted strictly
+        by `timestamp` ascending (oldest → newest). This endpoint is the primary
+        data source for the **frontend timeline view** — it provides a single,
+        ordered feed of everything the user has done across all streams.
+
+        **Difference from `GET /api/v1/signals/`:**
+
+        | | `GET /api/v1/signals/` | `GET /api/v1/signals/timeline/{user_id}` |
+        |---|---|---|
+        | Sort order | `timestamp DESC` (newest first) | `timestamp ASC` (oldest first) |
+        | Primary use | API queries, data analysis | Frontend timeline rendering |
+        | User scope | Any user via query param | Fixed to path `user_id` |
+        | Filtering | Multi-param combinable | Stream + time range only |
+        | Limit default | 50 | 200 (scrollable feed) |
+
+        **Phase 1 implementation note:** reads from the in-memory `_signals` store,
+        filters by `user_id`, sorts ascending. No pagination needed in Phase 1 —
+        the full timeline is returned up to `limit`.
+
+        **Phase 2 additions:** cursor-based pagination for infinite scroll,
+        grouping by day for the frontend `DateSeparator` component, RLS
+        enforcement so users can only query their own timeline.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "default_user"
+          description: |
+            Username or UUID of the user whose timeline to fetch.
+            Phase 1: use `"default_user"`. Phase 2: extracted from JWT.
+        - name: stream
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "boardy"
+          description: |
+            Filter the timeline to a single stream. Omit to return all streams
+            interleaved in chronological order.
+        - name: start_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: "2026-05-01T00:00:00Z"
+          description: Return only events at or after this ISO-8601 timestamp.
+        - name: end_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: "2026-05-31T23:59:59Z"
+          description: Return only events at or before this ISO-8601 timestamp.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 200
+            minimum: 1
+            maximum: 1000
+            example: 200
+          description: |
+            Maximum number of timeline events to return (default 200).
+            Phase 2 will replace this with cursor-based pagination.
+      responses:
+        '200':
+          description: |
+            Chronological list of signals for this user (oldest first).
+            Returns an empty list `[]` if the user has no signals.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignalTimeline'
+              example:
+                user_id: "default_user"
+                total: 3
+                signals:
+                  - id: "a1b2c3d4-0001-0000-0000-000000000001"
+                    user_id: "default_user"
+                    stream: "lpi_internal"
+                    event_type: "goal_created"
+                    payload:
+                      goal_title: "Master Agentic RAG"
+                    timestamp: "2026-05-10T08:00:00Z"
+                  - id: "a1b2c3d4-0002-0000-0000-000000000002"
+                    user_id: "default_user"
+                    stream: "boardy"
+                    event_type: "match_created"
+                    payload:
+                      matched_with: "Aditi Mehta"
+                    timestamp: "2026-05-15T10:30:00Z"
+                  - id: "a1b2c3d4-0003-0000-0000-000000000003"
+                    user_id: "default_user"
+                    stream: "lpi_internal"
+                    event_type: "goal_progress"
+                    payload:
+                      progress_pct: 35
+                    timestamp: "2026-05-20T14:00:00Z"
+        '404':
+          description: |
+            No user exists with the supplied `user_id`.
+            **Phase 1 note:** In Phase 1, all signals are stored under
+            `"default_user"`, so this will only fire if `user_id` does not
+            match `"default_user"` and no signals exist for the given value.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "No timeline found for user: unknown-user"
+                status_code: 404
+
+  # ── Recommendations ────────────────────────────────────────────────────────
+  /api/v1/recommendations/{user_id}:
+    get:
+      operationId: getRecommendations
+      tags:
+        - recommendations
+      summary: Get personalised SMILE-based recommendations
+      description: |
+        Analyses the user's goals and activity signals, then returns up to `limit`
+        prioritised next actions. Each recommendation is grounded in the SMILE
+        framework and cites the goals and signals that informed it.
+
+        **Phase 1:** Returns an empty list `[]` — this is the Phase 1 gate
+        deliverable (placeholder confirms the route is wired).
+        **Phase 2:** Heuristic scoring — identifies goals with few signals as
+        opportunity gaps; suggests "Read X", "Start project Y", "Connect with Z".
+        **Phase 3+:** LLM-powered reasoning using Daksh's LangGraph agent
+        framework; multi-step assessment → bottleneck identification → action
+        suggestion with SMILE-framed explanations; token cost tracked per call.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "default_user"
+          description: Username or UUID of the target user.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 3
+            minimum: 1
+            maximum: 10
+            example: 3
+          description: Maximum recommendations to return. Free tier capped at 3.
+      responses:
+        '200':
+          description: |
+            Array of recommendations (empty list in Phase 1).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+              example:
+                - id: "a1b2c3d4-0000-0000-0000-000000000001"
+                  user_id: "default_user"
+                  action: "Complete the LangGraph tutorial"
+                  reasoning: >
+                    You are in SENSE phase for 'Master Agentic RAG'.
+                    LangGraph is foundational to the Intervene phase.
+                    No lpi_internal signals for this goal exist yet — start here.
+                  smile_phase: "sense"
+                  priority: 9.0
+                  source_goals:
+                    - "550e8400-e29b-41d4-a716-446655440000"
+                  source_signals: []
+                  created_at: "2026-05-26T10:00:00Z"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMPONENTS
+# ─────────────────────────────────────────────────────────────────────────────
+components:
+  schemas:
+
+    # ── Enum ─────────────────────────────────────────────────────────────────
+    SmilePhase:
+      type: string
+      enum:
+        - sense
+        - model
+        - intervene
+        - learn
+        - evolve
+      example: "sense"
+      description: |
+        SMILE methodology phase for a goal.
+
+        | Value | Meaning |
+        |-------|---------|
+        | `sense` | Gathering data, observing reality, identifying signals |
+        | `model` | Building understanding, forming hypotheses, mapping relationships |
+        | `intervene` | Taking action, making changes, testing hypotheses |
+        | `learn` | Evaluating results, extracting lessons, measuring impact |
+        | `evolve` | Adapting strategy, refining approach, scaling what works |
+
+        **Transition validation** is enforced by `smile.validate_phase_transition`
+        called from the FastAPI route handler — **not** from a Pydantic validator.
+
+    # ── Request schemas ───────────────────────────────────────────────────────
+    GoalCreate:
+      type: object
+      description: |
+        Payload for creating a new goal. `user_id` is **not** a request field —
+        the server assigns `"default_user"` in Phase 1 and reads it from the
+        JWT token in Phase 2.
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "Master Agentic RAG"
+          description: Short, human-readable goal title. Required.
+        description:
+          type: string
+          maxLength: 1000
+          default: ""
+          example: "Build AI systems combining retrieval and generation"
+          description: Optional extended description of the goal.
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+          example: 9
+          description: Urgency/importance score (1 = lowest, 10 = highest). Defaults to 5.
+        smile_phase:
+          allOf:
+            - $ref: '#/components/schemas/SmilePhase'
+          default: "sense"
+          description: >
+            Initial SMILE phase for this goal.
+            Defaults to 'sense' when omitted.
+
+    GoalUpdate:
+      type: object
+      description: |
+        Partial update payload for an existing goal. All fields are optional;
+        only supplied fields are modified.
+
+        When `smile_phase` is provided, Pydantic validates it is a legal enum
+        member. The **FastAPI route handler** then checks the transition against
+        the current phase using `smile.validate_phase_transition` and returns
+        `422` if the transition is illegal (skip or same-phase).
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "Master Docker and Kubernetes"
+          description: Replacement title for the goal.
+        description:
+          type: string
+          maxLength: 1000
+          example: "Extended scope to include orchestration"
+          description: Replacement description for the goal.
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 8
+          description: Replacement priority score (1–10).
+        smile_phase:
+          $ref: '#/components/schemas/SmilePhase'
+
+    SignalCreate:
+      type: object
+      description: |
+        Payload for ingesting an activity signal. `user_id` is **not** a request
+        field — the server assigns `"default_user"` in Phase 1 and reads it from
+        the JWT token in Phase 2.
+      required:
+        - stream
+        - event_type
+      properties:
+        stream:
+          type: string
+          example: "boardy"
+          description: |
+            Source stream identifier. Recognised values: `boardy`, `datapro`,
+            `vsab`, `altiostar`, `security`, `lpi_internal`.
+            Phase 2 will validate against a strict whitelist.
+        event_type:
+          type: string
+          example: "match_created"
+          description: |
+            Event classification within the stream. Phase 2 will validate
+            per-stream allowed event types.
+        payload:
+          type: object
+          default: {}
+          example:
+            match_id: "m-123456"
+            matched_with: "Aditi Mehta"
+          description: Arbitrary JSON object carrying event-specific data.
+
+    # ── Response schemas ──────────────────────────────────────────────────────
+    HealthResponse:
+      type: object
+      description: |
+        Service health payload returned by `GET /health`.
+
+        **Phase 1:** Only `status` and `version` are returned.
+        The `timestamp` field is `nullable: true` because the Phase 1
+        implementation (`main.py`) does not populate it.
+        Phase 2 will return a full ISO-8601 server timestamp.
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - degraded
+            - unhealthy
+          example: "ok"
+          description: Liveness state of the service.
+        version:
+          type: string
+          example: "0.1.0"
+          description: Semantic version string matching `pyproject.toml`.
+        timestamp:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+          description: |
+            ISO-8601 server timestamp at response time.
+            Null in Phase 1; populated in Phase 2+.
+
+    Goal:
+      type: object
+      description: Full goal object returned by all goal endpoints.
+      required:
+        - id
+        - user_id
+        - title
+        - description
+        - priority
+        - smile_phase
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+          description: Server-assigned UUID for the goal.
+        user_id:
+          type: string
+          example: "default_user"
+          description: Owner of the goal. `"default_user"` in Phase 1.
+        title:
+          type: string
+          example: "Master Agentic RAG"
+          description: Goal title.
+        description:
+          type: string
+          example: "Build AI systems combining retrieval and generation"
+          description: Extended goal description. Empty string if not supplied.
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 9
+          description: Urgency/importance score (1 = lowest, 10 = highest).
+        smile_phase:
+          $ref: '#/components/schemas/SmilePhase'
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-26T09:30:00Z"
+          description: ISO-8601 timestamp of goal creation.
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-05-26T09:30:00Z"
+          description: ISO-8601 timestamp of the most recent update.
+
+    Signal:
+      type: object
+      description: Activity signal as stored and returned by the API.
+      required:
+        - id
+        - user_id
+        - stream
+        - event_type
+        - timestamp
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+          description: Server-assigned UUID for the signal.
+        user_id:
+          type: string
+          example: "default_user"
+          description: Owner of the signal. `"default_user"` in Phase 1.
+        stream:
+          type: string
+          example: "boardy"
+          description: Source stream that emitted this signal.
+        event_type:
+          type: string
+          example: "match_created"
+          description: Classification of the event within its stream.
+        payload:
+          type: object
+          example:
+            match_id: "m-123456"
+            matched_with: "Aditi Mehta"
+          description: Arbitrary JSON object with event-specific data.
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-05-26T09:30:00Z"
+          description: ISO-8601 timestamp of when the event occurred.
+
+    SignalTimeline:
+      type: object
+      description: |
+        Chronological activity timeline for a single user.
+        Returned exclusively by `GET /api/v1/signals/timeline/{user_id}`.
+        Signals are sorted oldest → newest (`timestamp ASC`) for frontend
+        timeline rendering.
+      required:
+        - user_id
+        - total
+        - signals
+      properties:
+        user_id:
+          type: string
+          example: "default_user"
+          description: The user this timeline belongs to.
+        total:
+          type: integer
+          example: 3
+          description: |
+            Total number of signals in the response (after any filters applied).
+            Phase 2 will add `total_unfiltered` for pagination metadata.
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/Signal'
+          description: |
+            Ordered list of signals, oldest first (`timestamp ASC`).
+            Empty array `[]` if the user has no signals matching the filters.
+
+    Recommendation:
+      type: object
+      description: |
+        A prioritised, SMILE-grounded suggested next action derived from the
+        user's goals and activity signals.
+      required:
+        - id
+        - user_id
+        - action
+        - reasoning
+        - smile_phase
+        - priority
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-0000-0000-0000-000000000001"
+          description: Server-assigned UUID for the recommendation.
+        user_id:
+          type: string
+          example: "default_user"
+          description: User this recommendation was generated for.
+        action:
+          type: string
+          example: "Complete the LangGraph tutorial"
+          description: Concrete action the user should take.
+        reasoning:
+          type: string
+          example: >
+            You are in SENSE phase for 'Master Agentic RAG'.
+            LangGraph is foundational. No progress signals exist yet.
+          description: >
+            Explanation of why this action is recommended, grounded in
+            the user's current SMILE phase and signal gaps.
+        smile_phase:
+          $ref: '#/components/schemas/SmilePhase'
+        priority:
+          type: number
+          format: float
+          minimum: 1
+          maximum: 10
+          example: 9.0
+          description: >
+            Urgency score (1.0 = lowest, 10.0 = highest). Typed as `float`
+            to match `Recommendation.priority` in `models.py`.
+        source_goals:
+          type: array
+          items:
+            type: string
+            format: uuid
+          example:
+            - "550e8400-e29b-41d4-a716-446655440000"
+          description: UUIDs of goals that informed this recommendation.
+        source_signals:
+          type: array
+          items:
+            type: string
+            format: uuid
+          example: []
+          description: UUIDs of signals that informed this recommendation.
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-26T10:00:00Z"
+          description: ISO-8601 timestamp of when this recommendation was generated.
+
+    DeleteResponse:
+      type: object
+      description: Confirmation payload returned after a successful delete operation.
+      required:
+        - deleted
+        - id
+      properties:
+        deleted:
+          type: boolean
+          example: true
+          description: Always `true` on a `200` response.
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+          description: UUID of the deleted resource.
+
+    # ── Error schemas ─────────────────────────────────────────────────────────
+    ErrorResponse:
+      type: object
+      description: Generic error payload for `400` and `404` responses.
+      properties:
+        detail:
+          type: string
+          example: "Goal not found"
+          description: Human-readable description of what went wrong.
+        status_code:
+          type: integer
+          example: 404
+          description: HTTP status code mirrored in the response body.
+
+    ValidationError:
+      type: object
+      description: |
+        FastAPI / Pydantic validation error envelope returned on `422` responses.
+        The `detail` array contains one entry per failed field.
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  oneOf:
+                    - type: string
+                    - type: integer
+                description: >
+                  Path to the invalid field, e.g. `["body", "priority"]`.
+              msg:
+                type: string
+                description: Human-readable validation message.
+              type:
+                type: string
+                description: Machine-readable Pydantic error type code.
+          example:
+            - loc:
+                - body
+                - priority
+              msg: "ensure this value is less than or equal to 10"
+              type: "value_error.number.not_le"
+
+# Phase 1: no authentication on any endpoint.
+# Phase 2: a bearerAuth JWT scheme will be added to components.securitySchemes
+# and applied per-endpoint once the auth middleware is wired.
+security: []

@@ -9,6 +9,16 @@ make test  # smoke + SMILE tests pass immediately
 make run   # FastAPI on port 8000
 ```
 
+## Local dev (Windows + Supabase local)
+
+See `DEVELOPMENT.md` for a PowerShell-first setup:
+
+```powershell
+.\scripts\dev.ps1 -Setup
+.\scripts\dev.ps1 -RunApi
+.\scripts\dev.ps1 -Test
+```
+
 ## Architecture
 ```
 Module 1: Goals  ->  Priority scoring + SMILE phase tracking

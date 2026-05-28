@@ -1,7 +1,17 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from lpi.main import app
+try:
+    from lpi.main import app
+except ModuleNotFoundError:
+    # Allow `pytest` to run from a fresh clone without requiring an editable install.
+    # If `lpi` is installed properly, this block is never used.
+    import sys
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(repo_root / "src"))
+    from lpi.main import app
 
 
 @pytest.fixture

@@ -15,4 +15,4 @@ run:
 	uvicorn lpi.main:app --reload --port 8000
 
 clean:
-	find . -type d -name __pycache__ -exec rm -rf {} +
+	python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('__pycache__')]"

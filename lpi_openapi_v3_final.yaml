@@ -35,7 +35,7 @@ info:
     **Authentication:** No auth in Phase 1. Phase 2 will introduce a JWT bearer
     scheme; endpoints will be updated at that point.
 
-    ## Module 2 — Activity Signals (Adil, Phase 1 contract)
+    ## Module 1, 2, 3 — Goal/Intent Registry, Activity Signals, Recommendation Engine (Jaivardhan and Adil, Q/A: Aryan, Phase 1 contract)
 
     Six signal endpoints are fully specified in this contract:
 
@@ -55,7 +55,7 @@ info:
   version: 0.1.0
   contact:
     name: Jaivardhan Singh (LPI Lead)
-    email: jai@lifeatlas.online
+    email: jaivardhansingh785@gmail.com
   license:
     name: Internal — Life Atlas
 

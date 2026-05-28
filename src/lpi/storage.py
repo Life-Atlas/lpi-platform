@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Dict, List
 
 from lpi.models import Goal, Signal
 
 
 @dataclass
 class InMemoryStore:
-    goals_by_id: Dict[str, Goal] = field(default_factory=dict)
-    signals_by_id: Dict[str, Signal] = field(default_factory=dict)
+    goals_by_id: dict[str, Goal] = field(default_factory=dict)
+    signals_by_id: dict[str, Signal] = field(default_factory=dict)
     lock: Lock = field(default_factory=Lock)
 
     def reset(self) -> None:

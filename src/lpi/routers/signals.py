@@ -27,8 +27,20 @@ def ingest_signal(signal: SignalCreate) -> Signal:
 
 
 @router.get("/", response_model=list[Signal])
-def list_signals() -> list[Signal]:
-    """Phase 3 prep only — GET /signals/ skeleton."""
+def list_signals(
+    user_id: str | None = None,
+    stream: str | None = None,
+    event_type: str | None = None,
+) -> list[Signal]:
+    """Phase 3 prep only — GET /signals/ skeleton with query params.
+    
+    Query parameters:
+    - user_id: Filter signals by user ID
+    - stream: Filter signals by stream name
+    - event_type: Filter signals by event type
+    
+    All filters are AND-combined. Returns [] until real signal querying is implemented.
+    """
     # Phase 3 prep only – not part of Phase 2 gate requirements.
     # Always return [] until real signal querying is implemented.
     return []

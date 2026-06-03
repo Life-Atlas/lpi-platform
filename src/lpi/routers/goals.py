@@ -115,7 +115,7 @@ def update_goal(goal_id: str, update: GoalUpdate) -> Goal:
         if update.smile_phase is not None and update.smile_phase != goal.smile_phase:
             if not validate_phase_transition(goal.smile_phase, update.smile_phase):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
                         f"Invalid SMILE transition: {goal.smile_phase} → "
                         f"{update.smile_phase}. Skipping phases is not allowed."

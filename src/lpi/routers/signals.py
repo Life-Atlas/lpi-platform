@@ -52,7 +52,7 @@ def ingest_signal_stub(signal: SignalCreate) -> Signal:
     Raises:
         NotImplementedError: Until Phase 3 implementation
     """
-    pass
+    raise NotImplementedError("Phase 3 task: signal ingestion not yet implemented")
 
 
 def query_signals_stub(
@@ -79,7 +79,7 @@ def query_signals_stub(
     Returns:
         List of Signal objects matching query (empty until Phase 3 implementation)
     """
-    pass
+    raise NotImplementedError("Phase 3 task: signal query not yet implemented")
 
 
 router = APIRouter()
@@ -108,7 +108,6 @@ def ingest_signal(signal: SignalCreate) -> Signal:
     - Route to backend based on stream type
     - Handle retries and error cases
     """
-    ingest_signal_stub(signal)
     raise NotImplementedError(
         "Phase 3 task: signal ingestion not yet implemented. "
         "See Phase 3 spec for storage backend details."
@@ -142,7 +141,6 @@ def list_signals(
     - Sort by timestamp DESC (most recent first)
     - Implement pagination with cursor/offset (Phase 3+)
     """
-    query_signals_stub(user_id=user_id, stream=stream, event_type=event_type)
     # Phase 3 prep only – not part of Phase 2 gate requirements.
     # Always return [] until real signal querying is implemented.
     return []

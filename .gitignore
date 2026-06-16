@@ -57,6 +57,7 @@ dmypy.json
 Thumbs.db
 
 # Secrets
+.secret.baseline
 .env
 *.pem
 *.key

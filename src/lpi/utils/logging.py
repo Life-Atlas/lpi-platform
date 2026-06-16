@@ -109,7 +109,8 @@ def log_transition(
         from lpi.config import settings
         from supabase import create_client  # type: ignore[attr-defined]
 
-        db = create_client(settings.supabase_url, settings.supabase_key)
+        key = settings.supabase_service_role_key or settings.supabase_key
+        db = create_client(settings.supabase_url, key)
         db.table("goal_phase_transitions").insert(record).execute()
 
     except Exception as exc:
@@ -177,7 +178,8 @@ def log_user_activity(
     try:
         from lpi.config import settings
         from supabase import create_client  # type: ignore[attr-defined]
-        db = create_client(settings.supabase_url, settings.supabase_key)
+        key = settings.supabase_service_role_key or settings.supabase_key
+        db = create_client(settings.supabase_url, key)
         # supabase-py client insert() expects JSON-compatible payloads. The
         # local record is typed as JsonData to match that contract.
         db.table("user_activity_logs").insert(cast(JsonData, record)).execute()
@@ -244,7 +246,8 @@ def log_system_event(
         from lpi.config import settings
         from supabase import create_client  # type: ignore[attr-defined]
 
-        db = create_client(settings.supabase_url, settings.supabase_key)
+        key = settings.supabase_service_role_key or settings.supabase_key
+        db = create_client(settings.supabase_url, key)
         # supabase-py client insert() expects JSON-compatible payloads. The
         # local record is typed as JsonData to match that contract.
         db.table("system_logs").insert(cast(JsonData, record)).execute()

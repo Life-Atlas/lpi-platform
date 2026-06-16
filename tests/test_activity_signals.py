@@ -6,7 +6,18 @@ Signal listing (GET) is wired and returns an empty list until Phase 3.
 All tests are marked no_store: signals don't touch the database store.
 """
 
-import pytest
+The autouse `clear_store` fixture in conftest.py runs before and after
+every test, wiping activity_signals and goals tables so tests don't
+interfere with each other.
+
+Requires:
+  - `supabase start` running locally
+  - .env with SUPABASE_URL=http://127.0.0.1:54321
+  - `supabase db push` applied (includes 20260611000000_create_activity_signals.sql)
+
+Run with:
+  pytest tests/test_activity_signals.py -v
+"""
 
 pytestmark = pytest.mark.no_store
 
@@ -21,7 +32,11 @@ class TestIngestSignal:
         """All streams return 501 until Phase 3 is implemented."""
         streams = ["boardy", "datapro", "vsab", "altiostar", "security"]
         for stream in streams:
-            signal = {"stream": stream, "event_type": "test", "payload": {}}
+            signal = {
+                "stream": stream,
+                "event_type": "test_event",
+                "payload": {},
+            }
             response = client.post("/api/v1/signals/", json=signal)
             assert response.status_code == 501
 

@@ -13,7 +13,7 @@ SUPABASE IN TESTS
 ─────────────────
 Tests run against a LOCAL Supabase instance. Ensure your .env file has:
     SUPABASE_URL=http://127.0.0.1:54321
-    SUPABASE_KEY=<local anon key from `supabase status`>
+    SUPABASE_KEY=<local service_role key from `supabase status`>
 
 If Supabase is unavailable, tests that require a live DB connection will
 be skipped automatically (pytest.skip) rather than failing with a

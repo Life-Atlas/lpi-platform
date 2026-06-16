@@ -57,7 +57,8 @@ class TimingMiddleware(BaseHTTPMiddleware):
                 from lpi.config import settings
                 from supabase import create_client  # type: ignore[attr-defined]
 
-                db = create_client(settings.supabase_url, settings.supabase_key)
+                key = settings.supabase_service_role_key or settings.supabase_key
+                db = create_client(settings.supabase_url, key)
                 db.table("request_logs").insert(
                     {
                         "method": request.method,

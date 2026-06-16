@@ -172,6 +172,90 @@ If Supabase fails, the error is caught, printed to stdout, and the request conti
 
 ---
 
+## Activity Signals 
+
+
+> **Phase 3** · Owner: Adil Islam · QA: Daksh Garg
+
+The Activity Signals module is the input layer for the LPI recommendation engine. It ingests structured events from any stream (LPI, Boardy, DataPro+, VSAB, etc.) and exposes a queryable, paginated timeline scoped to the authenticated user.
+- `src/lpi/routers/signals.py` — added auth via `Depends(get_current_user)` to POST/GET signal endpoints, matching the goals auth pattern and ensuring requests are scoped to the authenticated user.
+- `src/lpi/store.py` — updated `list_signals()` to accept `user_id` and apply `.eq("user_id", user_id)`, preventing cross-user visibility of signals.
+- `tests/test_activity_signals.py` — expanded `test_list_signals()` to assert every returned signal belongs to the authenticated test user.
+- `supabase/migrations/20260615000000_signals_rls_and_log_action.sql` — new migration adding RLS policies for `activity_signals` and extending `user_activity_logs` CHECK constraint to allow `'signal_ingested'`.
+- Note: The backend still uses service_role for Supabase writes; RLS is defense-in-depth for any direct client-side access.
+
+---
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/signals/` | Ingest a new activity signal |
+| `GET` | `/api/v1/signals/` | List signals with optional filters + pagination |
+| `GET` | `/api/v1/signals/{signal_id}` | Fetch a single signal by UUID |
+
+### Signal Schema
+
+```json
+{
+  "stream": "lpi",
+  "event_type": "pr_merged",
+  "payload": { "repo": "lpi-platform", "pr_number": 18 },
+  "source": "github_api"
+}
+```
+
+**Field reference:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stream` | `string` | Business domain the signal belongs to (`lpi`, `boardy`, `datapro`, `vsab`, `altiostar`) |
+| `event_type` | `string` | What happened within that stream (`pr_merged`, `match_created`, `deal_closed`, etc.) |
+| `payload` | `object` | Raw event data (JSONB). Structure varies per `event_type`. |
+| `source` | `string` | How the signal was ingested. Values: `github_api`, `manual`, `simulated`, `api` (default). Used by Phase 4 rec engine to weight signals. |
+
+Server assigns: `id` (UUID), `user_id`, `timestamp` (UTC).
+
+### Filtering & Pagination
+
+All filters are **server-side** — only matching rows are fetched from Supabase.
+
+```bash
+# All signals for the authenticated user
+GET /api/v1/signals/
+
+# Filter by stream
+GET /api/v1/signals/?stream=boardy
+
+# Filter by stream + event type
+GET /api/v1/signals/?stream=lpi&event_type=pr_merged
+
+# Only real GitHub signals (exclude simulated — used by Phase 4 rec engine)
+GET /api/v1/signals/?source=github_api
+
+# Pagination: page 2 of boardy signals
+GET /api/v1/signals/?stream=boardy&limit=50&offset=50
+```
+
+`limit` defaults to 50, maximum 200. `offset` defaults to 0.
+
+### Database
+
+Table: `activity_signals`  
+Migration: `supabase/migrations/..._create_activity_signals.sql`  
+Indexes: `idx_as_stream`, `idx_as_event_type`, `idx_as_source`, `idx_as_timestamp DESC`
+
+
+### Notes
+
+- Auth required on all endpoints (`Authorization: Bearer <jwt>`).
+- In Phase 3, `user_id` resolves to `default_user`. Real JWT scoping activates with the auth PR.
+- `source` field is the bridge to Phase 4: the recommendation engine calls `?source=github_api` to read only verified real signals, ignoring seeded/simulated test data.
+- Logging to `user_activity_logs` (`action: signal_ingested`) is guarded by `try/except` — a missing CHECK constraint entry never breaks ingestion.
+```
+```
+
+---
+
 ## Testing
 
 ```bash
@@ -183,6 +267,8 @@ pytest tests/test_goal_crud.py -v     # CRUD + logging integration
 pytest tests/test_smile.py -v         # SMILE phase logic (6-phase)
 pytest tests/test_scoring.py -v       # composite score assertions (48 tests)
 pytest tests/test_smoke.py -v         # fast boot + invariant checks
+pytest tests/test_activity_signals.py -v       # activity signa endpoints
+
 ```
 
 

@@ -11,14 +11,18 @@ Phase 4: Jaivardhan replaces the body with LangGraph agent reasoning.
 """
 
 from fastapi import APIRouter, Query
+from starlette.requests import Request
 
+from lpi.middleware.rate_limit import limiter
 from lpi.models import Recommendation
 
 router = APIRouter()
 
 
 @router.get("/{user_id}", response_model=list[Recommendation])
+@limiter.limit("30/minute")
 def get_recommendations(
+    request: Request,
     user_id: str,
     limit: int = Query(default=3, ge=1, le=10),
 ) -> list[Recommendation]:

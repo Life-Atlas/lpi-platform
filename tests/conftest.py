@@ -34,6 +34,7 @@ from fastapi.testclient import TestClient
 from lpi import store
 from lpi.config import settings
 from lpi.main import app
+from lpi.middleware.rate_limit import limiter
 from lpi.utils.logging import clear_all_logs
 
 # Fixed test secret + user id so every test gets a valid Supabase-style JWT
@@ -66,23 +67,45 @@ def _supabase_available() -> bool:
 
 
 @pytest.fixture(autouse=True)
+def _disable_rate_limit() -> Generator[None, None, None]:
+    """Disable rate limiting and reset bucket counts before every test.
+
+    Resetting the storage in-place (rather than replacing the object) matters:
+    limiter._limiter holds a reference to limiter._storage, so replacing
+    _storage has no effect on the actual counter. reset() clears the same
+    object that _limiter uses.
+    """
+    limiter._storage.reset()
+    limiter.enabled = False
+    yield
+    # No teardown restore — next test's setup will set the correct state.
+
+
+@pytest.fixture(autouse=True)
 def _jwt_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure get_current_user can verify the test JWT regardless of .env."""
     monkeypatch.setattr(settings, "supabase_jwt_secret", TEST_JWT_SECRET)
 
 
 @pytest.fixture(autouse=True)
-def clear_store() -> Generator[None, None, None]:
+def clear_store(request: pytest.FixtureRequest) -> Generator[None, None, None]:
     """Wipe all Supabase + in-memory state before and after every test.
 
     The `yield` splits setup (before) from teardown (after).
     Both sides are cleared so a failing test cannot pollute the next one.
+
+    Tests marked with @pytest.mark.no_store do not touch the database —
+    they skip the availability check and the clear calls entirely.
 
     If Supabase is unreachable the fixture skips the test with a clear
     message instead of raising a cryptic connection error. Tests that
     only use in-memory scoring (test_scoring.py) create no Goals and
     never call the store, so they run fine regardless.
     """
+    if request.node.get_closest_marker("no_store"):
+        yield
+        return
+
     if not _supabase_available():
         pytest.skip(
             "Local Supabase is not running. "

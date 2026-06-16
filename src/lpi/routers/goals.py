@@ -39,9 +39,11 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from starlette.requests import Request
 
 from lpi import store
 from lpi.middleware.auth import get_current_user
+from lpi.middleware.rate_limit import limiter
 from lpi.models import DeleteResponse, Goal, GoalCreate, GoalUpdate, SmilePhase
 
 # TASK C: import the SMILE-aware sort function
@@ -53,7 +55,8 @@ router = APIRouter()
 
 
 @router.post("/", response_model=Goal, status_code=status.HTTP_201_CREATED)
-def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user)) -> Goal:
+@limiter.limit("30/minute")
+def create_goal(request: Request, goal: GoalCreate, user_id: str = Depends(get_current_user)) -> Goal:
     """Create a new goal and store it.
 
     urgency_flag is handled automatically:
@@ -92,7 +95,9 @@ def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user)) -> G
 
 
 @router.get("/", response_model=list[Goal])
+@limiter.limit("60/minute")
 def list_goals(
+    request: Request,
     smile_phase: SmilePhase | None = None,
     user_id: str = Depends(get_current_user),
 ) -> list[Goal]:
@@ -114,7 +119,8 @@ def list_goals(
 
 
 @router.get("/{goal_id}", response_model=Goal)
-def get_goal(goal_id: str, user_id: str = Depends(get_current_user)) -> Goal:
+@limiter.limit("60/minute")
+def get_goal(request: Request, goal_id: str, user_id: str = Depends(get_current_user)) -> Goal:
     """Fetch a single goal by UUID. 404 if not found or not owned by the caller."""
     goal = store.get_goal(goal_id)
     if goal is None or goal.user_id != user_id:
@@ -126,8 +132,9 @@ def get_goal(goal_id: str, user_id: str = Depends(get_current_user)) -> Goal:
 
 
 @router.patch("/{goal_id}", response_model=Goal)
+@limiter.limit("30/minute")
 def update_goal(
-    goal_id: str, update: GoalUpdate, user_id: str = Depends(get_current_user)
+    request: Request, goal_id: str, update: GoalUpdate, user_id: str = Depends(get_current_user)
 ) -> Goal:
     """Partially update a goal. All fields optional.
 
@@ -155,7 +162,7 @@ def update_goal(
     if update.smile_phase is not None and update.smile_phase != goal.smile_phase:
         if not validate_phase_transition(goal.smile_phase, update.smile_phase):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     f"Invalid SMILE transition: {goal.smile_phase} → "
                     f"{update.smile_phase}. Skipping phases is not allowed."
@@ -190,7 +197,8 @@ def update_goal(
 
 
 @router.delete("/{goal_id}", response_model=DeleteResponse)
-def delete_goal(goal_id: str, user_id: str = Depends(get_current_user)) -> DeleteResponse:
+@limiter.limit("20/minute")
+def delete_goal(request: Request, goal_id: str, user_id: str = Depends(get_current_user)) -> DeleteResponse:
     """Remove a goal. Returns {"deleted": true, "id": "..."}.
 
     Field is `id` (not `goal_id`) — matches the OpenAPI contract.

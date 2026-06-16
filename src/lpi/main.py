@@ -12,8 +12,12 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from fastapi import FastAPI
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from starlette.requests import Request
 
 from lpi.middleware import register_middleware
+from lpi.middleware.rate_limit import limiter
 from lpi.routers import goals, recommendations, signals
 
 
@@ -38,6 +42,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Middleware must be registered before routers (Starlette requirement)
 register_middleware(app)
 
@@ -51,7 +58,8 @@ app.include_router(
 
 
 @app.get("/health", tags=["health"])
-def health() -> dict:
+@limiter.limit("60/minute")
+def health(request: Request) -> dict:
     """Service liveness probe. Phase 2: timestamp now populated (was null in Phase 1)."""
     return {
         "status": "ok",

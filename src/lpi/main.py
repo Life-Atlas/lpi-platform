@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from fastapi import FastAPI
 
 from lpi.middleware import register_middleware
-from lpi.routers import goals, recommendations, signals
+from lpi.routers import github_auth, goals, me, recommendations, signals, users, webhooks
 
 
 @asynccontextmanager
@@ -36,18 +36,22 @@ app = FastAPI(
     ),
     version="0.1.0",
     lifespan=lifespan,
-)
+) 
 
 # Middleware must be registered before routers (Starlette requirement)
 register_middleware(app)
 
 app.include_router(goals.router, prefix="/api/v1/goals", tags=["goals"])
 app.include_router(signals.router, prefix="/api/v1/signals", tags=["signals"])
+app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["webhooks"])
+app.include_router(github_auth.router, prefix="/api/v1/github", tags=["github_auth"])
 app.include_router(
     recommendations.router,
     prefix="/api/v1/recommendations",
     tags=["recommendations"],
 )
+app.include_router(me.router, prefix="/api/v1/me", tags=["me"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 
 
 @app.get("/health", tags=["health"])

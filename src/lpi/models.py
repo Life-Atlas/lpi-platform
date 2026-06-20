@@ -175,6 +175,7 @@ class Signal(SignalCreate):
     id: str
     user_id: str
     timestamp: datetime
+    
 
 
 # ── Recommendation model ──────────────────────────────────────────────────────

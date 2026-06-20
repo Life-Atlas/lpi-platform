@@ -286,4 +286,4 @@ pytest tests/test_activity_signals.py -v       # activity signa endpoints
 | Yashika | Logging spec / design | `utils/logging.py` spec, `test_smile.py` |
 | Aryan | Support | — |
 
-**Supervisors:** Danial, Nicolas — Roll-up: Christalyn
+**Supervisors:** Danial, Nicolas — Roll-up: Christalyn 

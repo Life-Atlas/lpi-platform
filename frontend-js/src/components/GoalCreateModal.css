@@ -1,0 +1,6 @@
+.goal-create-modal-panel {
+  isolation: isolate;
+}
+.modal-panel .widget:hover {
+  transform: none;
+}

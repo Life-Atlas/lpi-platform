@@ -57,6 +57,7 @@ The clear_all() helper wipes both tables between test runs.
 """
 
 import threading
+from datetime import datetime
 from typing import TYPE_CHECKING, cast
 
 from lpi.config import settings
@@ -78,6 +79,7 @@ def _get_client() -> "Client":
     authenticated server-side operations bypass RLS as designed.
     """
     from supabase import create_client  # type: ignore[attr-defined]
+
     key = settings.supabase_service_role_key or settings.supabase_key
     if not key:
         raise RuntimeError(
@@ -98,6 +100,7 @@ _goals_lock = threading.Lock()
 
 
 # ── Goals ──────────────────────────────────────────────────────────────────────
+
 
 def get_goal(goal_id: str) -> Goal | None:
     """Fetch a single goal by its UUID. Returns None if not found."""
@@ -133,9 +136,7 @@ def insert_goal(goal: Goal) -> Goal:
 
 def update_goal(goal_id: str, updates: dict) -> Goal:
     """Apply a partial update dict to a goal row. Returns the updated goal."""
-    result = (
-        _get_client().table("goals").update(updates).eq("id", goal_id).execute()
-    )
+    result = _get_client().table("goals").update(updates).eq("id", goal_id).execute()
     return Goal(**cast(dict, result.data[0]))
 
 
@@ -153,6 +154,7 @@ def delete_goal(goal_id: str) -> None:
 # Pattern: identical to the goals functions above. If you understand
 # how insert_goal / list_goals / get_goal work, these are the same.
 
+
 def insert_signal(signal: Signal) -> Signal:
     """Persist a new signal row to the activity_signals Supabase table.
 
@@ -163,9 +165,7 @@ def insert_signal(signal: Signal) -> Signal:
     Returns the original signal unchanged (Supabase returns the inserted
     row but we already have it — no need to re-parse it).
     """
-    _get_client().table("activity_signals").insert(
-        signal.model_dump(mode="json")
-    ).execute()
+    _get_client().table("activity_signals").insert(signal.model_dump(mode="json")).execute()
     return signal
 
 
@@ -174,6 +174,8 @@ def list_signals(
     stream: str | None = None,
     event_type: str | None = None,
     source: str | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[Signal]:
@@ -232,6 +234,11 @@ def list_signals(
         query = query.eq("event_type", event_type)
     if source:
         query = query.eq("source", source)
+    if start is not None:
+        query = query.gte("timestamp", start.isoformat())
+
+    if end is not None:
+        query = query.lte("timestamp", end.isoformat())
 
     # Sort newest-first, then apply pagination.
     # .order("timestamp", desc=True) → ORDER BY timestamp DESC
@@ -253,19 +260,14 @@ def get_signal(signal_id: str) -> Signal | None:
     Used by GET /api/v1/signals/{signal_id} — not yet in the router
     but defined here so Phase 4 can use it without touching the store.
     """
-    result = (
-        _get_client()
-        .table("activity_signals")
-        .select("*")
-        .eq("id", signal_id)
-        .execute()
-    )
+    result = _get_client().table("activity_signals").select("*").eq("id", signal_id).execute()
     if not result.data:
         return None
     return Signal(**cast(dict, result.data[0]))
 
 
 # ── Test helper ───────────────────────────────────────────────────────────────
+
 
 def clear_all() -> None:
     """Wipe all data from goals and activity_signals. Call ONLY from tests.
@@ -284,9 +286,7 @@ def clear_all() -> None:
     in conftest.py, so tests never see each other's data.
     """
     # Wipe all goals rows
-    _get_client().table("goals").delete().neq(
-        "user_id", "__sentinel_never_exists__"
-    ).execute()
+    _get_client().table("goals").delete().neq("user_id", "__sentinel_never_exists__").execute()
 
     # Wipe all activity_signals rows (Phase 3 addition)
     _get_client().table("activity_signals").delete().neq(

@@ -16,6 +16,7 @@ We pick the verification method based on the token's own `alg` header.
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 
 from lpi.config import settings
 
@@ -79,3 +80,16 @@ def get_current_user(
         )
 
     return payload["sub"]
+
+
+class UserContext(BaseModel):
+    user_id: str
+    is_admin: bool
+
+
+def get_current_user_context(
+    user_id: str = Depends(get_current_user),
+) -> UserContext:
+    """Return the authenticated user's ID and whether they are an admin."""
+    is_admin = user_id in settings.admin_ids_list
+    return UserContext(user_id=user_id, is_admin=is_admin)

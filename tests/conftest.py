@@ -61,7 +61,8 @@ def _supabase_available() -> bool:
     try:
         store.list_goals()
         return True
-    except Exception:
+    except Exception as e:
+        print("SUPABASE CHECK FAILED:", repr(e))
         return False
 
 
@@ -107,6 +108,10 @@ def client() -> TestClient:
     test_client.headers.update({"Authorization": f"Bearer {_make_token()}"})
     return test_client
 
+@pytest.fixture
+def unauthenticated_client() -> TestClient:
+    """FastAPI test client without Authorization header."""
+    return TestClient(app)
 
 @pytest.fixture
 def sample_goal() -> dict:
@@ -129,5 +134,6 @@ def sample_signal() -> dict:
     return {
         "stream": "boardy",
         "event_type": "match_created",
+        "timestamp": "2026-06-11T10:00:00Z",
         "payload": {"person_a": "Alice", "person_b": "Bob", "score": 0.85},
     }

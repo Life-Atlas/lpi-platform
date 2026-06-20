@@ -1,0 +1,31 @@
+.login-error-container {
+  color: #f87171;
+  font-size: 0.85rem;
+  background: rgba(248, 113, 113, 0.1);
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.login-form-group-spacing {
+  margin-top: 12px;
+}
+
+.login-submit-spacing {
+  margin-top: 20px;
+}
+
+.login-toggle-container {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.login-toggle-btn {
+  background: none;
+  border: none;
+  color: #a78bfa;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+}

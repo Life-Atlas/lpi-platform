@@ -1,0 +1,95 @@
+.goal-card-owner {
+  font-size: 0.85rem;
+  color: #a78bfa;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.goal-card-owner-email {
+  word-break: break-all;
+}
+
+.goal-card-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Delete confirmation modal */
+.confirm-delete-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9998;
+  backdrop-filter: blur(4px);
+}
+
+.confirm-delete-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--surface, #1a1a2e);
+  border-radius: 16px;
+  padding: 32px;
+  width: 360px;
+  z-index: 9999;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.confirm-delete-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 107, 107, 0.15);
+  color: #ff6b6b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  font-size: 1.5rem;
+}
+
+.confirm-delete-title {
+  color: #fff;
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.confirm-delete-desc {
+  color: var(--text-secondary, #aaa);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+.confirm-delete-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.confirm-delete-btn-cancel {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.confirm-delete-btn-danger {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  background: #ff6b6b;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}

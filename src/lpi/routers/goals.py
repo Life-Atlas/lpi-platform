@@ -38,10 +38,10 @@ TASK C CHANGE — What changed and WHY
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from lpi import store
-from lpi.middleware.auth import get_current_user
+from lpi.middleware.auth import UserContext, get_current_user, get_current_user_context
 from lpi.models import DeleteResponse, Goal, GoalCreate, GoalUpdate, SmilePhase
 
 # TASK C: import the SMILE-aware sort function
@@ -94,17 +94,19 @@ def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user)) -> G
 @router.get("/", response_model=list[Goal])
 def list_goals(
     smile_phase: SmilePhase | None = None,
-    user_id: str = Depends(get_current_user),
+    fetch_all: bool = Query(False, alias="all"),
+    user_context: UserContext = Depends(get_current_user_context),
 ) -> list[Goal]:
     """Return the caller's goals, sorted by SMILE-weighted composite score.
 
     TASK C: replaced the raw priority sort with sort_goals_by_score().
     This makes urgency_flag and SMILE phase affect the returned order.
 
-    Results are always scoped to the authenticated user. Optional filter:
+    Results are always scoped to the authenticated user unless all=True and user is admin. Optional filter:
       ?smile_phase=reality-emulation → only goals in REALITY_EMULATION phase
     """
-    goals = store.list_goals(user_id=user_id, smile_phase=smile_phase)
+    target_user_id = None if (fetch_all and user_context.is_admin) else user_context.user_id
+    goals = store.list_goals(user_id=target_user_id, smile_phase=smile_phase)
 
     # TASK C: sort by composite score instead of raw priority
     # sort_goals_by_score() uses:
@@ -114,10 +116,10 @@ def list_goals(
 
 
 @router.get("/{goal_id}", response_model=Goal)
-def get_goal(goal_id: str, user_id: str = Depends(get_current_user)) -> Goal:
-    """Fetch a single goal by UUID. 404 if not found or not owned by the caller."""
+def get_goal(goal_id: str, user_context: UserContext = Depends(get_current_user_context)) -> Goal:
+    """Fetch a single goal by UUID. 404 if not found or not owned by the caller (unless admin)."""
     goal = store.get_goal(goal_id)
-    if goal is None or goal.user_id != user_id:
+    if goal is None or (goal.user_id != user_context.user_id and not user_context.is_admin):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Goal {goal_id} not found",

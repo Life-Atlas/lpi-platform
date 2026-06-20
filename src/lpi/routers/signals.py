@@ -49,7 +49,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from lpi import store
-from lpi.middleware.auth import get_current_user
+from lpi.middleware.auth import UserContext, get_current_user, get_current_user_context
 from lpi.models import Signal, SignalCreate
 from lpi.utils.logging import log_user_activity
 
@@ -57,6 +57,7 @@ router = APIRouter()
 
 
 # ── Wave 2: POST /api/v1/signals/ ────────────────────────────────────────────
+
 
 @router.post(
     "/",
@@ -106,9 +107,9 @@ def ingest_signal(
     # fields (id, user_id, timestamp) on top.
     now = datetime.now(UTC)
     new_signal = Signal(
-        id=str(uuid.uuid4()),   # UUID generated here, not by Postgres
-        user_id=user_id,        # "default_user" in Phase 3
-        timestamp=now,          # always UTC
+        id=str(uuid.uuid4()),  # UUID generated here, not by Postgres
+        user_id=user_id,  # "default_user" in Phase 3
+        timestamp=now,  # always UTC
         **signal.model_dump(),  # stream, event_type, payload, source
     )
 
@@ -137,10 +138,12 @@ def ingest_signal(
         # Log to stdout — visible in uvicorn logs. Never breaks the endpoint.
         print(f"[ingest_signal] WARNING: logging failed for signal {new_signal.id}: {exc}")
 
+    print(new_signal.model_dump())
     return new_signal
 
 
 # ── Wave 3: GET /api/v1/signals/ ─────────────────────────────────────────────
+
 
 @router.get(
     "/",
@@ -169,10 +172,18 @@ def list_signals(
             "exclude simulated signals."
         ),
     ),
+    start: datetime | None = Query(
+        default=None,
+        description="Return signals created at or after this UTC timestamp.",
+    ),
+    end: datetime | None = Query(
+        default=None,
+        description="Return signals created at or before this UTC timestamp.",
+    ),
     limit: int = Query(
         default=50,
-        ge=1,           # minimum 1 row
-        le=200,         # maximum 200 rows — prevents accidentally huge responses
+        ge=1,  # minimum 1 row
+        le=200,  # maximum 200 rows — prevents accidentally huge responses
         description=(
             "Max rows per page (1–200). Use with offset for pagination. "
             "Default 50 is enough for dashboards and the rec engine."
@@ -180,7 +191,7 @@ def list_signals(
     ),
     offset: int = Query(
         default=0,
-        ge=0,           # cannot be negative
+        ge=0,  # cannot be negative
         description=(
             "Number of rows to skip. Page 1 = offset 0. "
             "Page 2 = offset 50 (if limit=50). "
@@ -188,7 +199,8 @@ def list_signals(
             "total row count does NOT affect query speed."
         ),
     ),
-    user_id: str = Depends(get_current_user),
+    fetch_all: bool = Query(False, alias="all"),
+    user_context: UserContext = Depends(get_current_user_context),
 ) -> list[Signal]:
     """Return signals filtered by stream, event_type, and/or source.
 
@@ -221,17 +233,21 @@ def list_signals(
       GET /api/v1/signals/?source=github_api&limit=20      → 20 real GitHub events
       GET /api/v1/signals/?stream=boardy&limit=50&offset=50 → boardy page 2
     """
+    target_user_id = None if (fetch_all and user_context.is_admin) else user_context.user_id
     return store.list_signals(
-        user_id=user_id,
+        user_id=target_user_id,
         stream=stream,
         event_type=event_type,
         source=source,
+        start=start,
+        end=end,
         limit=limit,
         offset=offset,
     )
 
 
 # ── Bonus: GET /api/v1/signals/{signal_id} ───────────────────────────────────
+
 
 @router.get(
     "/{signal_id}",
@@ -241,7 +257,7 @@ def list_signals(
 )
 def get_signal(
     signal_id: str,
-    user_id: str = Depends(get_current_user),
+    user_context: UserContext = Depends(get_current_user_context),
 ) -> Signal:
     """Fetch one signal by UUID. 404 if not found or not owned by caller.
 
@@ -249,9 +265,16 @@ def get_signal(
     cannot determine whether another user's signal exists.
     """
     signal = store.get_signal(signal_id)
-    if signal is None or signal.user_id != user_id:
+    if signal is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Signal '{signal_id}' not found.",
         )
+        
+    if not user_context.is_admin and signal.user_id != user_context.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Signal '{signal_id}' not found.",
+        )
+        
     return signal

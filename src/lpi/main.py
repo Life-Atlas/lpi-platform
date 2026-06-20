@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from fastapi import FastAPI
 
 from lpi.middleware import register_middleware
-from lpi.routers import goals, recommendations, signals, webhooks, github_auth
+from lpi.routers import github_auth, goals, recommendations, signals, webhooks
 
 
 @asynccontextmanager

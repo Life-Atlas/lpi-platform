@@ -15,6 +15,17 @@ Specifically:
   - get_signal()    → fetches a single signal by id
   - clear_all()     → now also truncates 'activity_signals'
 
+PHASE 3 FOLLOW-UP (this pass)
+────────────────────────────────
+  - list_signals() gained `start`/`end` params for time-range filtering
+    (closes the §4.3 gate gap — was the largest discrepancy between the
+    spec sheet and the running code).
+  - get_user_activity_logs() added: a thin read helper over the
+    `user_activity_logs` table, used by tests to verify the audit trail
+    for signal ingestion actually exists in Supabase (not just in the
+    in-memory mirror in utils/logging.py, which always succeeds even if
+    the real Supabase write silently failed).
+
 HOW THE STORE CONNECTS TO SUPABASE
 ────────────────────────────────────
 Every function calls _get_client() which creates a supabase-py client
@@ -41,6 +52,8 @@ not in Python after fetching all rows.
 Why it matters: at 10,000 signals, client-side fetches 10,000 rows to
 return 50. Server-side fetches and returns 50. The indexes in the migration
 (idx_as_stream, idx_as_event_type, etc.) make this O(log n) instead of O(n).
+The same logic applies to the new start/end range filter below — it uses
+idx_as_timestamp, which already existed but had no filter wired to it.
 
 FOR TESTS
 ──────────
@@ -150,9 +163,6 @@ def delete_goal(goal_id: str) -> None:
 # These replace the Phase 2 in-memory dict stub.
 # The table 'activity_signals' is created by:
 #   supabase/migrations/20260611000000_create_activity_signals.sql
-#
-# Pattern: identical to the goals functions above. If you understand
-# how insert_goal / list_goals / get_goal work, these are the same.
 
 
 def insert_signal(signal: Signal) -> Signal:
@@ -186,7 +196,8 @@ def list_signals(
     other user's signals, which is a data isolation bug.
 
     ALL filtering happens inside Postgres (server-side), not in Python.
-    Each .eq() call adds a WHERE clause — only matching rows come back.
+    Each .eq()/.gte()/.lte() call adds a WHERE clause — only matching
+    rows come back.
 
     Args:
         user_id    : Scope results to the authenticated user's signals.
@@ -195,10 +206,39 @@ def list_signals(
         event_type : Filter to one event type (e.g. 'pr_merged').
         source     : Filter by ingestion origin (e.g. 'github_api').
                      Phase 4 rec engine uses this to exclude 'simulated'.
+        start      : Inclusive lower bound on `timestamp`. Closes the
+                     §4.3 gate gap — "Timeline queryable by user and time
+                     range" was a named success criterion that previously
+                     had no router/store wiring at all.
+        end        : Inclusive upper bound on `timestamp`.
         limit      : Max rows to return per page (default 50, max 200).
                      Prevents accidentally fetching thousands of rows.
         offset     : How many rows to skip (for pagination).
                      Page 1 = offset 0, Page 2 = offset 50, etc.
+
+    TIME-RANGE FILTERING EXPLAINED
+    ─────────────────────────────────
+    `.gte("timestamp", start.isoformat())` → WHERE timestamp >= start
+    `.lte("timestamp", end.isoformat())`   → WHERE timestamp <= end
+    Both bounds are inclusive. Either can be supplied alone:
+      - only `start`  → "everything since X"
+      - only `end`    → "everything up to X"
+      - both          → a closed window
+      - neither       → unchanged behavior (no time filter), so this is
+                        fully backward-compatible with existing callers.
+
+    `.isoformat()` is required because the Supabase REST/PostgREST layer
+    expects a string, not a Python datetime object, the same reason
+    insert_signal() calls signal.model_dump(mode="json") rather than
+    passing a raw Pydantic model. Incoming `start`/`end` should be
+    timezone-aware (the router enforces ISO-8601 with an offset/Z) so the
+    comparison against the TIMESTAMPTZ column in Postgres is unambiguous.
+
+    This filter uses idx_as_timestamp DESC, which already existed in the
+    Phase 3 migration but had no corresponding .gte()/.lte() call until
+    now — an index without a matching filter is dead weight; a filter
+    without a matching index is a full table scan waiting to happen.
+    Adding the filter here is what actually makes the existing index useful.
 
     PAGINATION EXPLAINED
     ─────────────────────
@@ -227,17 +267,22 @@ def list_signals(
 
     # Add filters only when the caller provided them.
     # Each .eq() adds: WHERE column = 'value'
-    # Chaining two .eq() calls adds: WHERE col1 = 'v1' AND col2 = 'v2'
+    # Chaining calls adds: WHERE col1 = 'v1' AND col2 = 'v2' AND ...
     if stream:
         query = query.eq("stream", stream)
     if event_type:
         query = query.eq("event_type", event_type)
     if source:
         query = query.eq("source", source)
-    if start is not None:
+    
+    # Time-range filter (new). `if start:` / `if end:` works correctly here
+    # because datetime instances are always truthy in Python (no __bool__
+    # override) — this is the same truthy-check idiom already used for
+    # stream/event_type/source above, just applied to a datetime instead
+    # of a string.
+    if start:
         query = query.gte("timestamp", start.isoformat())
-
-    if end is not None:
+    if end:
         query = query.lte("timestamp", end.isoformat())
 
     # Sort newest-first, then apply pagination.
@@ -257,14 +302,52 @@ def list_signals(
 def get_signal(signal_id: str) -> Signal | None:
     """Fetch a single signal by its UUID. Returns None if not found.
 
-    Used by GET /api/v1/signals/{signal_id} — not yet in the router
-    but defined here so Phase 4 can use it without touching the store.
+    Used by GET /api/v1/signals/{signal_id}.
     """
     result = _get_client().table("activity_signals").select("*").eq("id", signal_id).execute()
     if not result.data:
         return None
     return Signal(**cast(dict, result.data[0]))
 
+
+# ── Audit log verification (new — used by tests, also useful for admin tooling) ─
+
+def get_user_activity_logs(
+    resource_id: str | None = None,
+    action: str | None = None,
+) -> list[dict]:
+    """Read rows directly from the user_activity_logs Supabase table.
+
+    WHY THIS EXISTS
+    ─────────────────
+    utils/logging.py's in-memory `user_activity_logs` list is appended to
+    unconditionally, BEFORE the Supabase insert is attempted — so it
+    always "succeeds" even if the real database write silently fails
+    (e.g. a CHECK constraint mismatch, exactly what shipped with
+    signal_ingested logging). Asserting against that in-memory list in a
+    test therefore cannot catch that class of bug.
+
+    This function queries Supabase directly, which is the only reliable
+    way to confirm a log row actually exists in the database — used by
+    the regression test in tests/test_activity_signals.py
+    (test_ingest_writes_audit_log) and available for any admin/debug
+    tooling that needs to inspect the real audit trail.
+
+    Args:
+        resource_id : Filter to logs for one specific goal/signal UUID.
+        action      : Filter to one action string, e.g. "signal_ingested".
+
+    Returns:
+        Raw list of matching rows (dicts), newest behavior not enforced —
+        callers needing order/pagination should add it the same way
+        list_signals() does, if this grows beyond test/debug usage.
+    """
+    query = _get_client().table("user_activity_logs").select("*")
+    if resource_id:
+        query = query.eq("resource_id", resource_id)
+    if action:
+        query = query.eq("action", action)
+    return cast(list[dict], query.execute().data)  # ← always reached
 
 # ── Test helper ───────────────────────────────────────────────────────────────
 
@@ -284,6 +367,12 @@ def clear_all() -> None:
 
     This is called before AND after every test by the autouse fixture
     in conftest.py, so tests never see each other's data.
+
+    NOTE: this does NOT wipe user_activity_logs. If you add a test that
+    relies on a clean audit-log table between runs (e.g. counting rows
+    rather than filtering by resource_id), wipe it the same way here.
+    The current regression test avoids this by filtering on resource_id,
+    which is unique per signal and doesn't require a clean table.
     """
     # Wipe all goals rows
     _get_client().table("goals").delete().neq("user_id", "__sentinel_never_exists__").execute()

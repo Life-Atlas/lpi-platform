@@ -270,7 +270,77 @@ pytest tests/test_smoke.py -v         # fast boot + invariant checks
 pytest tests/test_activity_signals.py -v       # activity signa endpoints
 
 ```
+## Activity Signals — Time-Range Filtering
 
+`GET /api/v1/signals/` supports filtering by a UTC timestamp window in
+addition to `stream`, `event_type`, and `source`:
+
+```bash
+# Everything since June 13
+GET /api/v1/signals/?start=2026-06-13T00:00:00Z
+
+# A closed one-week window
+GET /api/v1/signals/?start=2026-06-13T00:00:00Z&end=2026-06-20T00:00:00Z
+```
+
+Both bounds are inclusive and optional independently. All filtering
+happens server-side in Postgres via `idx_as_timestamp` — no client-side
+filtering, so response time doesn't degrade as the table grows.
+
+---
+
+## Recommendations Endpoint (Phase 4 — Wave 1)
+
+`GET /api/v1/recommendations/{user_id}` returns up to `limit` (default 3,
+max 10) next-action recommendations, sorted by priority descending.
+
+**Status:** Wave 1 — deterministic mock data, real auth, stable contract.
+Wave 2 (Jaivardhan) will replace the mock data source with real
+goal/signal-grounded reasoning without changing the response shape.
+
+```bash
+curl http://127.0.0.1:8000/api/v1/recommendations/intern-a-demo-profile \
+  -H "Authorization: Bearer <jwt>"
+```
+
+Response:
+```json
+[
+  {
+    "id": "uuid",
+    "user_id": "intern-a-demo-profile",
+    "action": "Ingest this week's GitHub activity as a signal",
+    "reasoning": "...",
+    "smile_phase": "collective-intelligence",
+    "priority": 5.60,
+    "source_goals": [],
+    "source_signals": [],
+    "created_at": "2026-06-21T..."
+  }
+]
+```
+
+`priority` uses the same `[0.80, 7.00]` scale as goals (`lpi/scoring.py`),
+so frontend priority badges can be reused as-is.
+
+**Note:** `user_id` is a path parameter, not derived from the JWT — any
+authenticated caller can request recommendations for any user_id. This is
+intentional for the demo (one session, multiple seeded intern profiles)
+and should be revisited before any real multi-tenant rollout.
+
+---
+
+## Required setup before pulling this branch
+
+```bash
+supabase db push
+```
+
+This applies `20260615000000_signals_rls_and_log_action.sql`, which adds
+`signal_ingested` to the `user_activity_logs` CHECK constraint. Without
+this migration, signal ingestion will still work but its audit log entry
+will silently fail to write (now surfaced via `logger.exception()` instead
+of a swallowed `print()`).
 
 ---
 

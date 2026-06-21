@@ -14,6 +14,18 @@ Phase 3 (this file):
   GET  /  → queries Supabase with server-side filters + pagination  [Wave 3]
   GET  /{signal_id} → fetch a single signal by UUID               [bonus]
 
+PHASE 3 FOLLOW-UP (this pass)
+────────────────────────────────
+  - GET / gained `start`/`end` query params for time-range filtering.
+    This was the single largest gap between the gate sheet ("Timeline
+    queryable by user and time range") and the running code.
+  - The ingest logging comment below is corrected: log_user_activity()
+    in utils/logging.py already has its own internal try/except and
+    never raises, so the try/except previously wrapped around it here
+    was dead code for the CHECK-constraint failure mode. See
+    utils/logging.py for the real fix (logger.exception instead of
+    print) and the migration note below.
+
 HOW THIS ROUTER FITS INTO THE SYSTEM
 ──────────────────────────────────────
 Signals are the input layer for the recommendation engine.
@@ -22,7 +34,7 @@ Flow:
     → POST /api/v1/signals/           ← THIS FILE
       → store.insert_signal()
         → Supabase activity_signals table
-          → Phase 4: GET /api/v1/signals/?stream=...  ← ALSO THIS FILE
+          → Phase 4: GET /api/v1/signals/?stream=...&start=...&end=...  ← ALSO THIS FILE
             → Jaivardhan's recommendation engine reads signals here
 
 WHY source MATTERS
@@ -36,11 +48,13 @@ LOGGING
 ────────
 Every POST calls log_user_activity() — same pattern as goals.py.
 The action string is 'signal_ingested'.
-NOTE: The user_activity_logs table CHECK constraint currently only allows
-      'goal_created', 'goal_updated', 'goal_deleted'. To log signals there,
-      either update the CHECK constraint or add a new 'signal_ingested' value.
-      For now, logging is wrapped in try/except so a constraint mismatch
-      never breaks the ingest endpoint — it just prints a warning.
+NOTE: the user_activity_logs CHECK constraint originally only allowed
+      'goal_created', 'goal_updated', 'goal_deleted'. The fix is already
+      written in supabase/migrations/20260615000000_signals_rls_and_log_action.sql
+      — apply it with `supabase db push` if not already applied.
+      log_user_activity() itself never raises (it catches and logs its own
+      Supabase errors internally via the standard `logging` module), so
+      no try/except is needed at this call site.
 """
 
 import uuid
@@ -118,25 +132,22 @@ def ingest_signal(
     # which runs an INSERT into the activity_signals table.
     store.insert_signal(new_signal)
 
-    # Log the ingest event.
-    # Wrapped in try/except because the user_activity_logs CHECK constraint
-    # may not yet include 'signal_ingested' — a constraint mismatch raises
-    # an exception in supabase-py. We log the warning but never break the
-    # ingest endpoint. Update the CHECK constraint migration to fix properly.
-    try:
-        log_user_activity(
-            user_id=user_id,
-            action="signal_ingested",
-            resource_id=new_signal.id,
-            metadata={
-                "stream": new_signal.stream,
-                "event_type": new_signal.event_type,
-                "source": new_signal.source,
-            },
-        )
-    except Exception as exc:
-        # Log to stdout — visible in uvicorn logs. Never breaks the endpoint.
-        print(f"[ingest_signal] WARNING: logging failed for signal {new_signal.id}: {exc}")
+    # Log the ingest event. No try/except here: log_user_activity() already
+    # guarantees it never raises — it catches any Supabase-side failure
+    # internally and reports it via logger.exception() (see
+    # utils/logging.py). Wrapping it here again would be redundant and,
+    # worse, gives a false impression that THIS is where a logging failure
+    # gets caught — it isn't; this call simply cannot raise.
+    log_user_activity(
+        user_id=user_id,
+        action="signal_ingested",
+        resource_id=new_signal.id,
+        metadata={
+            "stream": new_signal.stream,
+            "event_type": new_signal.event_type,
+            "source": new_signal.source,
+        },
+    )
 
     print(new_signal.model_dump())
     return new_signal
@@ -202,16 +213,18 @@ def list_signals(
     fetch_all: bool = Query(False, alias="all"),
     user_context: UserContext = Depends(get_current_user_context),
 ) -> list[Signal]:
-    """Return signals filtered by stream, event_type, and/or source.
+    """Return signals filtered by stream, event_type, source, and/or time range.
 
     HOW SERVER-SIDE FILTERING WORKS HERE
     ──────────────────────────────────────
-    Each query param (stream, event_type, source) is passed to
-    store.list_signals(), which chains .eq() calls on the Supabase
-    query builder. This translates to SQL WHERE clauses:
+    Each query param (stream, event_type, source, start, end) is passed to
+    store.list_signals(), which chains .eq()/.gte()/.lte() calls on the
+    Supabase query builder. This translates to SQL WHERE clauses:
 
-      ?stream=boardy               → WHERE stream = 'boardy'
-      ?stream=boardy&source=manual → WHERE stream = 'boardy' AND source = 'manual'
+      ?stream=boardy                         → WHERE stream = 'boardy'
+      ?stream=boardy&source=manual           → WHERE stream = 'boardy' AND source = 'manual'
+      ?start=2026-06-13T00:00:00Z             → WHERE timestamp >= '2026-06-13T00:00:00Z'
+      ?start=...&end=...                      → WHERE timestamp BETWEEN start AND end (inclusive)
 
     Only rows matching ALL provided filters are returned.
     Postgres runs the filter using the indexes from the migration:
@@ -227,11 +240,13 @@ def list_signals(
     Postgres never reads rows outside the requested window.
 
     Example calls:
-      GET /api/v1/signals/                                 → last 50 signals
-      GET /api/v1/signals/?stream=boardy                   → boardy signals
-      GET /api/v1/signals/?stream=lpi&event_type=pr_merged → LPI PRs only
-      GET /api/v1/signals/?source=github_api&limit=20      → 20 real GitHub events
-      GET /api/v1/signals/?stream=boardy&limit=50&offset=50 → boardy page 2
+      GET /api/v1/signals/                                          → last 50 signals
+      GET /api/v1/signals/?stream=boardy                            → boardy signals
+      GET /api/v1/signals/?stream=lpi&event_type=pr_merged          → LPI PRs only
+      GET /api/v1/signals/?source=github_api&limit=20                → 20 real GitHub events
+      GET /api/v1/signals/?start=2026-06-13T00:00:00Z                → everything since June 13
+      GET /api/v1/signals/?start=2026-06-13T00:00:00Z&end=2026-06-20T00:00:00Z → one week window
+      GET /api/v1/signals/?stream=boardy&limit=50&offset=50          → boardy page 2
     """
     target_user_id = None if (fetch_all and user_context.is_admin) else user_context.user_id
     return store.list_signals(

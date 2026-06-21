@@ -100,6 +100,7 @@ system_logs: list[dict] = []
 # LOG TYPE 1 — SMILE Phase Transitions
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def log_transition(
     goal_id: str,
     from_phase: SmilePhase,
@@ -129,11 +130,11 @@ def log_transition(
 
     # Build the record once — shared by both destinations
     record = {
-        "goal_id":         goal_id,
-        "from_phase":      str(from_phase),
-        "to_phase":        str(to_phase),
+        "goal_id": goal_id,
+        "from_phase": str(from_phase),
+        "to_phase": str(to_phase),
         "transitioned_at": now_iso,
-        "user_id":         user_id,
+        "user_id": user_id,
     }
 
     # ── 1. Write to in-memory list (always, for tests) ─────────────────────
@@ -164,6 +165,7 @@ def log_transition(
 # ══════════════════════════════════════════════════════════════════════════════
 # LOG TYPE 2 — User Activity
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def log_user_activity(
     user_id: str,
@@ -209,11 +211,11 @@ def log_user_activity(
 
     # Build the record once — shared by both destinations
     record: dict[str, JsonData] = {
-        "user_id":     user_id,
-        "action":      action,
+        "user_id": user_id,
+        "action": action,
         "resource_id": resource_id,
-        "metadata":    metadata_payload,
-        "logged_at":   now_iso,
+        "metadata": metadata_payload,
+        "logged_at": now_iso,
     }
 
     # ── 1. Write to in-memory list (always, for tests) ─────────────────────
@@ -231,6 +233,7 @@ def log_user_activity(
     try:
         from lpi.config import settings
         from supabase import create_client  # type: ignore[attr-defined]
+
         key = settings.supabase_service_role_key or settings.supabase_key
         db = create_client(settings.supabase_url, key)
         # supabase-py client insert() expects JSON-compatible payloads. The
@@ -253,13 +256,16 @@ def log_user_activity(
             "check that 20260615000000_signals_rls_and_log_action.sql has been "
             "pushed (`supabase db push`) — the CHECK constraint must include "
             "'signal_ingested'.",
-            user_id, action, resource_id,
+            user_id,
+            action,
+            resource_id,
         )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LOG TYPE 3 — System Events
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def log_system_event(
     event: str,
@@ -294,10 +300,10 @@ def log_system_event(
 
     # Build the record once — shared by both destinations
     record: dict[str, JsonData] = {
-        "event":     event,
-        "level":     level,
-        "detail":    detail,
-        "metadata":  metadata_payload,
+        "event": event,
+        "level": level,
+        "detail": detail,
+        "metadata": metadata_payload,
         "logged_at": now_iso,
     }
 
@@ -320,15 +326,13 @@ def log_system_event(
     except Exception:
         # NOTE: not yet migrated to logger.exception() — same follow-up as
         # log_transition() above, out of scope for this pass.
-        print(
-            f"[log_system_event] WARNING: Supabase insert failed for "
-            f"event={event} level={level}"
-        )
+        print(f"[log_system_event] WARNING: Supabase insert failed for event={event} level={level}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TEST HELPERS — call ONLY from conftest.py autouse fixture
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def clear_transition_logs() -> None:
     """Wipe phase_transition_logs. Does NOT delete Supabase rows.

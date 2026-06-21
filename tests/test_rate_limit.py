@@ -21,6 +21,7 @@ _TEST_IP = "testclient"  # IP Starlette assigns to TestClient requests
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def clear_store():
     """Override conftest's autouse clear_store — no Supabase needed here."""
@@ -42,6 +43,7 @@ def _fill(ip: str, limit_type: str, count: int) -> None:
 
 # ── Happy path — requests below the limit pass through ────────────────────────
 
+
 class TestRateLimitPassThrough:
     def test_health_passes_below_limit(self, client) -> None:
         _fill(_TEST_IP, "health", rl._HEALTH_LIMIT - 1)
@@ -59,6 +61,7 @@ class TestRateLimitPassThrough:
 
 
 # ── Limit enforced — requests at or over the limit return 429 ─────────────────
+
 
 class TestRateLimitEnforced:
     def test_health_429_at_limit(self, client) -> None:
@@ -100,6 +103,7 @@ class TestRateLimitEnforced:
 
 # ── 429 response format ───────────────────────────────────────────────────────
 
+
 class TestRateLimitResponse:
     def test_429_detail_message(self, client) -> None:
         _fill(_TEST_IP, "health", rl._HEALTH_LIMIT)
@@ -120,6 +124,7 @@ class TestRateLimitResponse:
 
 # ── CORS preflight bypass ─────────────────────────────────────────────────────
 
+
 class TestOptionsAlwaysBypasses:
     def test_options_bypasses_write_limit(self, client) -> None:
         _fill(_TEST_IP, "write", rl._WRITE_LIMIT)
@@ -131,6 +136,7 @@ class TestOptionsAlwaysBypasses:
 
 
 # ── Per-IP isolation ──────────────────────────────────────────────────────────
+
 
 class TestRateLimitIsolation:
     def test_different_ips_have_independent_counters(self, client) -> None:

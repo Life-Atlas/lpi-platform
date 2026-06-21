@@ -85,10 +85,7 @@ def clear_store() -> Generator[None, None, None]:
     never call the store, so they run fine regardless.
     """
     if not _supabase_available():
-        pytest.skip(
-            "Local Supabase is not running. "
-            "Start it with `supabase start` then re-run."
-        )
+        pytest.skip("Local Supabase is not running. Start it with `supabase start` then re-run.")
 
     store.clear_all()
     clear_all_logs()
@@ -108,10 +105,12 @@ def client() -> TestClient:
     test_client.headers.update({"Authorization": f"Bearer {_make_token()}"})
     return test_client
 
+
 @pytest.fixture
 def unauthenticated_client() -> TestClient:
     """FastAPI test client without Authorization header."""
     return TestClient(app)
+
 
 @pytest.fixture
 def sample_goal() -> dict:

@@ -14,31 +14,36 @@ GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 
 # --- Pydantic Models for Request Validation ---
 
+
 class TokenExchangeRequest(BaseModel):
     code: str
     user_id: str
+
 
 class FetchRepoRequest(BaseModel):
     user_id: str
     repo_owner: str
     repo_name: str
 
+
 class TrackRepoRequest(BaseModel):
     user_id: str
     repo_owner: str
-    repo_name: str 
+    repo_name: str
+
 
 # --- Mock Database ---
 # In production, this saves to your database table: user_id -> github_access_token
 token_db: dict[str, str] = {}
 
 # --- Configuration ---
-# Your webhook receiver URL. 
+# Your webhook receiver URL.
 # Update this to your real production domain when deploying, or keep updated with Ngrok for local testing.
 WEBHOOK_TARGET_URL = "https://balance-suburb-singular.ngrok-free.dev/api/v1/webhooks/github"
 
 
 # --- Endpoints ---
+
 
 @router.post("/exchange-token", status_code=status.HTTP_200_OK)
 async def exchange_github_token(request: TokenExchangeRequest):
@@ -51,7 +56,7 @@ async def exchange_github_token(request: TokenExchangeRequest):
     payload = {
         "client_id": GITHUB_CLIENT_ID,
         "client_secret": GITHUB_CLIENT_SECRET,
-        "code": request.code
+        "code": request.code,
     }
     headers = {"Accept": "application/json"}
 
@@ -61,15 +66,15 @@ async def exchange_github_token(request: TokenExchangeRequest):
 
     if "error" in data:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail=data.get("error_description", "Authentication failed")
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=data.get("error_description", "Authentication failed"),
         )
 
     access_token = data.get("access_token")
-    
+
     # Securely save this token tied to the user's profile
     token_db[request.user_id] = access_token
-    
+
     # Example production integration:
     # store.save_github_token(request.user_id, access_token)
 
@@ -79,7 +84,7 @@ async def exchange_github_token(request: TokenExchangeRequest):
 @router.get("/user-repositories/{user_id}", status_code=status.HTTP_200_OK)
 async def list_user_repositories(user_id: str):
     """
-    Dynamically fetches all repositories (including private ones) 
+    Dynamically fetches all repositories (including private ones)
     that this specific user owns, so the frontend can populate a selection dropdown.
     """
     access_token = token_db.get(user_id)
@@ -91,17 +96,19 @@ async def list_user_repositories(user_id: str):
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "LPI-Platform-Backend"
+        "User-Agent": "LPI-Platform-Backend",
     }
 
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
-        
+
     if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail="Failed to fetch repositories from GitHub.")
+        raise HTTPException(
+            status_code=response.status_code, detail="Failed to fetch repositories from GitHub."
+        )
 
     repos = response.json()
-    
+
     # Filter out clean structural data for the frontend dropdown selection
     repo_list = [
         {
@@ -110,7 +117,7 @@ async def list_user_repositories(user_id: str):
             "full_name": repo["full_name"],
             "private": repo["private"],
             "owner": repo["owner"]["login"],
-            "html_url": repo["html_url"]
+            "html_url": repo["html_url"],
         }
         for repo in repos
     ]
@@ -131,25 +138,22 @@ async def auto_register_webhook(request: TrackRepoRequest):
 
     # Tell GitHub to create a webhook on this specific repository
     url = f"https://api.github.com/repos/{request.repo_owner}/{request.repo_name}/hooks"
-    
+
     payload = {
         "name": "web",
         "active": True,
-        "events": ["push", "pull_request", "pull_request_review"], 
-        "config": {
-            "url": WEBHOOK_TARGET_URL,
-            "content_type": "json"
-        }
+        "events": ["push", "pull_request", "pull_request_review"],
+        "config": {"url": WEBHOOK_TARGET_URL, "content_type": "json"},
     }
-    
+
     headers = {
         "Authorization": f"Bearer {access_token}",
-        "Accept": "application/vnd.github.v3+json"
+        "Accept": "application/vnd.github.v3+json",
     }
 
     async with httpx.AsyncClient() as client:
         response = await client.post(url, json=payload, headers=headers)
-        
+
     if response.status_code not in [200, 201]:
         # If it returns 422, it usually means the webhook already exists on that repo
         if response.status_code == 422:

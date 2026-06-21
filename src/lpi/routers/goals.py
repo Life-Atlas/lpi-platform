@@ -71,7 +71,7 @@ def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user)) -> G
         user_id=user_id,
         created_at=now,
         updated_at=now,
-        **goal.model_dump(),        # includes urgency_flag automatically
+        **goal.model_dump(),  # includes urgency_flag automatically
     )
     store.insert_goal(new_goal)
 
@@ -81,9 +81,9 @@ def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user)) -> G
         action="goal_created",
         resource_id=new_goal.id,
         metadata={
-            "title":        new_goal.title,
-            "priority":     new_goal.priority,
-            "smile_phase":  str(new_goal.smile_phase),
+            "title": new_goal.title,
+            "priority": new_goal.priority,
+            "smile_phase": str(new_goal.smile_phase),
             "urgency_flag": new_goal.urgency_flag,
         },
     )
@@ -128,9 +128,7 @@ def get_goal(goal_id: str, user_context: UserContext = Depends(get_current_user_
 
 
 @router.patch("/{goal_id}", response_model=Goal)
-def update_goal(
-    goal_id: str, update: GoalUpdate, user_id: str = Depends(get_current_user)
-) -> Goal:
+def update_goal(goal_id: str, update: GoalUpdate, user_id: str = Depends(get_current_user)) -> Goal:
     """Partially update a goal. All fields optional.
 
     urgency_flag is handled automatically by Pydantic:

@@ -64,105 +64,150 @@ class TestPhaseTransitions:
 
     def test_phase1_to_phase2_allowed(self) -> None:
         """Reality Emulation → Concurrent Engineering: valid forward step."""
-        assert validate_phase_transition(
-            SmilePhase.REALITY_EMULATION,
-            SmilePhase.CONCURRENT_ENGINEERING,
-        ) is True
+        assert (
+            validate_phase_transition(
+                SmilePhase.REALITY_EMULATION,
+                SmilePhase.CONCURRENT_ENGINEERING,
+            )
+            is True
+        )
 
     def test_phase2_to_phase3_allowed(self) -> None:
-        assert validate_phase_transition(
-            SmilePhase.CONCURRENT_ENGINEERING,
-            SmilePhase.COLLECTIVE_INTELLIGENCE,
-        ) is True
+        assert (
+            validate_phase_transition(
+                SmilePhase.CONCURRENT_ENGINEERING,
+                SmilePhase.COLLECTIVE_INTELLIGENCE,
+            )
+            is True
+        )
 
     def test_phase3_to_phase4_allowed(self) -> None:
-        assert validate_phase_transition(
-            SmilePhase.COLLECTIVE_INTELLIGENCE,
-            SmilePhase.CONTEXTUAL_INTELLIGENCE,
-        ) is True
+        assert (
+            validate_phase_transition(
+                SmilePhase.COLLECTIVE_INTELLIGENCE,
+                SmilePhase.CONTEXTUAL_INTELLIGENCE,
+            )
+            is True
+        )
 
     def test_phase4_to_phase5_allowed(self) -> None:
-        assert validate_phase_transition(
-            SmilePhase.CONTEXTUAL_INTELLIGENCE,
-            SmilePhase.CONTINUOUS_INTELLIGENCE,
-        ) is True
+        assert (
+            validate_phase_transition(
+                SmilePhase.CONTEXTUAL_INTELLIGENCE,
+                SmilePhase.CONTINUOUS_INTELLIGENCE,
+            )
+            is True
+        )
 
     def test_phase5_to_phase6_allowed(self) -> None:
-        assert validate_phase_transition(
-            SmilePhase.CONTINUOUS_INTELLIGENCE,
-            SmilePhase.PERPETUAL_WISDOM,
-        ) is True
+        assert (
+            validate_phase_transition(
+                SmilePhase.CONTINUOUS_INTELLIGENCE,
+                SmilePhase.PERPETUAL_WISDOM,
+            )
+            is True
+        )
 
     # ── Backward any steps (re-evaluation is always valid in SMILE) ─────────
 
     def test_backward_one_step_allowed(self) -> None:
         """A new discovery can send you back one phase."""
-        assert validate_phase_transition(
-            SmilePhase.CONCURRENT_ENGINEERING,
-            SmilePhase.REALITY_EMULATION,
-        ) is True
+        assert (
+            validate_phase_transition(
+                SmilePhase.CONCURRENT_ENGINEERING,
+                SmilePhase.REALITY_EMULATION,
+            )
+            is True
+        )
 
     def test_backward_many_steps_allowed(self) -> None:
         """Perpetual Wisdom → Reality Emulation: full reset is permitted."""
-        assert validate_phase_transition(
-            SmilePhase.PERPETUAL_WISDOM,
-            SmilePhase.REALITY_EMULATION,
-        ) is True
+        assert (
+            validate_phase_transition(
+                SmilePhase.PERPETUAL_WISDOM,
+                SmilePhase.REALITY_EMULATION,
+            )
+            is True
+        )
 
     def test_backward_partial_allowed(self) -> None:
         """Continuous Intelligence → Collective Intelligence: valid backward."""
-        assert validate_phase_transition(
-            SmilePhase.CONTINUOUS_INTELLIGENCE,
-            SmilePhase.COLLECTIVE_INTELLIGENCE,
-        ) is True
+        assert (
+            validate_phase_transition(
+                SmilePhase.CONTINUOUS_INTELLIGENCE,
+                SmilePhase.COLLECTIVE_INTELLIGENCE,
+            )
+            is True
+        )
 
     # ── Skip forward (forbidden — must step through each phase) ─────────────
 
     def test_skip_phase1_to_phase3_rejected(self) -> None:
         """Reality Emulation → Collective Intelligence skips Phase 2: rejected."""
-        assert validate_phase_transition(
-            SmilePhase.REALITY_EMULATION,
-            SmilePhase.COLLECTIVE_INTELLIGENCE,
-        ) is False
+        assert (
+            validate_phase_transition(
+                SmilePhase.REALITY_EMULATION,
+                SmilePhase.COLLECTIVE_INTELLIGENCE,
+            )
+            is False
+        )
 
     def test_skip_phase1_to_phase4_rejected(self) -> None:
-        assert validate_phase_transition(
-            SmilePhase.REALITY_EMULATION,
-            SmilePhase.CONTEXTUAL_INTELLIGENCE,
-        ) is False
+        assert (
+            validate_phase_transition(
+                SmilePhase.REALITY_EMULATION,
+                SmilePhase.CONTEXTUAL_INTELLIGENCE,
+            )
+            is False
+        )
 
     def test_skip_phase2_to_phase4_rejected(self) -> None:
-        assert validate_phase_transition(
-            SmilePhase.CONCURRENT_ENGINEERING,
-            SmilePhase.CONTEXTUAL_INTELLIGENCE,
-        ) is False
+        assert (
+            validate_phase_transition(
+                SmilePhase.CONCURRENT_ENGINEERING,
+                SmilePhase.CONTEXTUAL_INTELLIGENCE,
+            )
+            is False
+        )
 
     def test_skip_phase1_to_phase6_rejected(self) -> None:
         """Can't jump from Phase 1 to Phase 6."""
-        assert validate_phase_transition(
-            SmilePhase.REALITY_EMULATION,
-            SmilePhase.PERPETUAL_WISDOM,
-        ) is False
+        assert (
+            validate_phase_transition(
+                SmilePhase.REALITY_EMULATION,
+                SmilePhase.PERPETUAL_WISDOM,
+            )
+            is False
+        )
 
     # ── Same phase (no-op — always forbidden) ────────────────────────────────
 
     def test_same_phase_reality_emulation_rejected(self) -> None:
-        assert validate_phase_transition(
-            SmilePhase.REALITY_EMULATION,
-            SmilePhase.REALITY_EMULATION,
-        ) is False
+        assert (
+            validate_phase_transition(
+                SmilePhase.REALITY_EMULATION,
+                SmilePhase.REALITY_EMULATION,
+            )
+            is False
+        )
 
     def test_same_phase_perpetual_wisdom_rejected(self) -> None:
-        assert validate_phase_transition(
-            SmilePhase.PERPETUAL_WISDOM,
-            SmilePhase.PERPETUAL_WISDOM,
-        ) is False
+        assert (
+            validate_phase_transition(
+                SmilePhase.PERPETUAL_WISDOM,
+                SmilePhase.PERPETUAL_WISDOM,
+            )
+            is False
+        )
 
     def test_same_phase_middle_rejected(self) -> None:
-        assert validate_phase_transition(
-            SmilePhase.COLLECTIVE_INTELLIGENCE,
-            SmilePhase.COLLECTIVE_INTELLIGENCE,
-        ) is False
+        assert (
+            validate_phase_transition(
+                SmilePhase.COLLECTIVE_INTELLIGENCE,
+                SmilePhase.COLLECTIVE_INTELLIGENCE,
+            )
+            is False
+        )
 
 
 class TestPhaseDescriptions:
@@ -180,8 +225,10 @@ class TestPhaseDescriptions:
 
     def test_concurrent_engineering_mentions_mvt(self) -> None:
         """Phase 2 description mentions MVT (Minimal Viable Twin)."""
-        assert "mvt" in get_phase_description(SmilePhase.CONCURRENT_ENGINEERING).lower() or \
-               "minimal viable" in get_phase_description(SmilePhase.CONCURRENT_ENGINEERING).lower()
+        assert (
+            "mvt" in get_phase_description(SmilePhase.CONCURRENT_ENGINEERING).lower()
+            or "minimal viable" in get_phase_description(SmilePhase.CONCURRENT_ENGINEERING).lower()
+        )
 
     def test_collective_intelligence_mentions_ontology(self) -> None:
         """Phase 3 is about ontology factories — a key SMILE concept."""

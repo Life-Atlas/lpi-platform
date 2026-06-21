@@ -7,6 +7,7 @@ to the correct 6-phase framework from data/smile-framework.json.
 
 def test_imports() -> None:
     from lpi import main
+
     assert main.app is not None
 
 

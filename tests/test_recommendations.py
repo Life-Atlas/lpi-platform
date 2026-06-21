@@ -60,19 +60,13 @@ class TestGetRecommendationsAuth:
     def test_requires_authentication(self) -> None:
         """No Authorization header at all -> 401, not 200 with an empty list."""
         unauthenticated_client = TestClient(app)
-        response = unauthenticated_client.get(
-            f"/api/v1/recommendations/{DEMO_USER_ID}"
-        )
+        response = unauthenticated_client.get(f"/api/v1/recommendations/{DEMO_USER_ID}")
         assert response.status_code == 401
 
     def test_rejects_garbage_token(self) -> None:
         unauthenticated_client = TestClient(app)
-        unauthenticated_client.headers.update(
-            {"Authorization": "Bearer not-a-real-jwt"}
-        )
-        response = unauthenticated_client.get(
-            f"/api/v1/recommendations/{DEMO_USER_ID}"
-        )
+        unauthenticated_client.headers.update({"Authorization": "Bearer not-a-real-jwt"})
+        response = unauthenticated_client.get(f"/api/v1/recommendations/{DEMO_USER_ID}")
         assert response.status_code == 401
 
 
@@ -177,9 +171,7 @@ class TestGetRecommendationsLimit:
         assert response.status_code == 422
 
     def test_non_integer_limit_is_rejected(self, client) -> None:
-        response = client.get(
-            f"/api/v1/recommendations/{DEMO_USER_ID}?limit=not-a-number"
-        )
+        response = client.get(f"/api/v1/recommendations/{DEMO_USER_ID}?limit=not-a-number")
         assert response.status_code == 422
 
     def test_limit_1_returns_highest_priority_item(self, client) -> None:
@@ -359,8 +351,7 @@ class TestRecommendationsDiversity:
         recs = response.json()
         ids = [r["id"] for r in recs]
         assert len(ids) == len(set(ids)), (
-            f"Duplicate recommendation ids found: {ids}. "
-            "Each recommendation must have a unique id."
+            f"Duplicate recommendation ids found: {ids}. Each recommendation must have a unique id."
         )
 
     def test_each_recommendation_covers_a_different_smile_phase(self, client) -> None:
@@ -429,9 +420,7 @@ class TestRecommendationsReasoning:
                 "exists — the engine is not reading the caller's stored goals."
             )
 
-    def test_recommendation_reasoning_names_its_smile_phase(
-        self, client, sample_goal
-    ) -> None:
+    def test_recommendation_reasoning_names_its_smile_phase(self, client, sample_goal) -> None:
         """Each recommendation's reasoning must literally name the SMILE
         phase it targets — generic advice with no phase reference is not
         SMILE-grounded.

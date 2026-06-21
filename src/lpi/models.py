@@ -47,15 +47,16 @@ class SmilePhase(StrEnum):
     every LPI journey begins by establishing the reality canvas.
     """
 
-    REALITY_EMULATION = "reality-emulation"             # Phase 1
-    CONCURRENT_ENGINEERING = "concurrent-engineering"   # Phase 2
-    COLLECTIVE_INTELLIGENCE = "collective-intelligence" # Phase 3
-    CONTEXTUAL_INTELLIGENCE = "contextual-intelligence" # Phase 4
-    CONTINUOUS_INTELLIGENCE = "continuous-intelligence" # Phase 5
-    PERPETUAL_WISDOM = "perpetual-wisdom"               # Phase 6
+    REALITY_EMULATION = "reality-emulation"  # Phase 1
+    CONCURRENT_ENGINEERING = "concurrent-engineering"  # Phase 2
+    COLLECTIVE_INTELLIGENCE = "collective-intelligence"  # Phase 3
+    CONTEXTUAL_INTELLIGENCE = "contextual-intelligence"  # Phase 4
+    CONTINUOUS_INTELLIGENCE = "continuous-intelligence"  # Phase 5
+    PERPETUAL_WISDOM = "perpetual-wisdom"  # Phase 6
 
 
 # ── Goal models ───────────────────────────────────────────────────────────────
+
 
 class GoalCreate(BaseModel):
     """Request body for POST /api/v1/goals/.
@@ -111,6 +112,7 @@ class DeleteResponse(BaseModel):
 
 
 # ── Signal models ─────────────────────────────────────────────────────────────
+
 
 class SignalCreate(BaseModel):
     """Request body for POST /api/v1/signals/.
@@ -175,10 +177,10 @@ class Signal(SignalCreate):
     id: str
     user_id: str
     timestamp: datetime
-    
 
 
 # ── Recommendation model ──────────────────────────────────────────────────────
+
 
 class Recommendation(BaseModel):
     """smile_phase now references the correct 6-phase SmilePhase enum above."""

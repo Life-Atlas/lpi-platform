@@ -31,12 +31,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="LPI Platform",
     description=(
-        "Life Programmable Interface: goal registry, activity signals, "
-        "recommendation engine"
+        "Life Programmable Interface: goal registry, activity signals, recommendation engine"
     ),
     version="0.1.0",
     lifespan=lifespan,
-) 
+)
 
 # Middleware must be registered before routers (Starlette requirement)
 register_middleware(app)

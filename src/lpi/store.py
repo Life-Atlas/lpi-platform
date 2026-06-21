@@ -274,7 +274,7 @@ def list_signals(
         query = query.eq("event_type", event_type)
     if source:
         query = query.eq("source", source)
-    
+
     # Time-range filter (new). `if start:` / `if end:` works correctly here
     # because datetime instances are always truthy in Python (no __bool__
     # override) — this is the same truthy-check idiom already used for
@@ -312,6 +312,7 @@ def get_signal(signal_id: str) -> Signal | None:
 
 # ── Audit log verification (new — used by tests, also useful for admin tooling) ─
 
+
 def get_user_activity_logs(
     resource_id: str | None = None,
     action: str | None = None,
@@ -348,6 +349,7 @@ def get_user_activity_logs(
     if action:
         query = query.eq("action", action)
     return cast(list[dict], query.execute().data)  # ← always reached
+
 
 # ── Test helper ───────────────────────────────────────────────────────────────
 

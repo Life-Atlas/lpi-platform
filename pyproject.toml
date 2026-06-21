@@ -18,6 +18,14 @@ dependencies = [
     "httpx>=0.27.0",
     "python-dotenv>=1.0.0",
     "pyjwt>=2.8.0",
+    # ── LLM / reasoning layer (Phase 4 — Core Algorithm) ────────────────────
+    # langgraph : state-machine graph used by src/lpi/langgraph_agent.py
+    # anthropic : paid Claude API (commented-out code path in _call_llm,
+    #             re-enabled once we have an ANTHROPIC_API_KEY)
+    # groq      : free-tier LLM API — active default until then
+    "langgraph>=0.2.0",
+    "anthropic>=0.39.0",
+    "groq>=0.11.0",
 ]
 
 [project.optional-dependencies]

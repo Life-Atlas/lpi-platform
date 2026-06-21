@@ -285,11 +285,11 @@ def get_signal(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Signal '{signal_id}' not found.",
         )
-        
+
     if not user_context.is_admin and signal.user_id != user_context.user_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Signal '{signal_id}' not found.",
         )
-        
+
     return signal

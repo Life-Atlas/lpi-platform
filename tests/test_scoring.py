@@ -43,6 +43,7 @@ from lpi.scoring import (
 
 # ── Test helper ───────────────────────────────────────────────────────────────
 
+
 def _goal(
     priority: int,
     phase: SmilePhase,
@@ -69,6 +70,7 @@ def _goal(
 
 
 # ── Phase weights constant tests ──────────────────────────────────────────────
+
 
 class TestPhaseWeightsConstant:
     """Verify every weight constant in PHASE_WEIGHTS matches smile-framework.json.
@@ -122,6 +124,7 @@ class TestPhaseWeightsConstant:
 
 
 # ── Known-value tests (all hand-verified) ────────────────────────────────────
+
 
 class TestScoreGoalKnownValues:
     """Every assertion is hand-computed and verified. These are the ground truth.
@@ -180,6 +183,7 @@ class TestScoreGoalKnownValues:
 
 # ── Urgency flag behaviour ────────────────────────────────────────────────────
 
+
 class TestScoreGoalWithUrgency:
     """Tests that isolate the urgency_flag contribution across all 6 phases."""
 
@@ -190,9 +194,7 @@ class TestScoreGoalWithUrgency:
                 without = score_goal(_goal(p, phase, False))
                 with_u = score_goal(_goal(p, phase, True))
                 diff = round(with_u - without, 2)
-                assert diff == 0.20, (
-                    f"p={p}, {phase}: expected urgency diff=0.20, got {diff}"
-                )
+                assert diff == 0.20, f"p={p}, {phase}: expected urgency diff=0.20, got {diff}"
 
     def test_urgent_goal_always_scores_higher_than_nonurgent(self) -> None:
         for phase in SmilePhase:
@@ -206,18 +208,19 @@ class TestScoreGoalWithUrgency:
         concurrent-engineering urgent=False:   3.10
         Phase 2 wins (3.10 > 3.00), but gap is now 0.10 instead of 0.30.
         """
-        re_urgent = score_goal(_goal(5, SmilePhase.REALITY_EMULATION, True))    # 3.00
-        ce_normal = score_goal(_goal(5, SmilePhase.CONCURRENT_ENGINEERING, False)) # 3.10
+        re_urgent = score_goal(_goal(5, SmilePhase.REALITY_EMULATION, True))  # 3.00
+        ce_normal = score_goal(_goal(5, SmilePhase.CONCURRENT_ENGINEERING, False))  # 3.10
         assert ce_normal > re_urgent
         assert round(ce_normal - re_urgent, 2) == pytest.approx(0.10)
 
     def test_urgency_flag_defaults_to_false(self) -> None:
-        g = _goal(5, SmilePhase.REALITY_EMULATION)   # no urgent= arg
+        g = _goal(5, SmilePhase.REALITY_EMULATION)  # no urgent= arg
         assert g.urgency_flag is False
         assert score_goal(g) == 2.80
 
 
 # ── General properties ────────────────────────────────────────────────────────
+
 
 class TestScoreGoalProperties:
     def test_returns_float(self) -> None:
@@ -236,20 +239,20 @@ class TestScoreGoalProperties:
 
     def test_phases_strictly_ascending_by_score(self) -> None:
         """Each subsequent phase must score higher at equal priority."""
-        scores = [score_goal(_goal(5, ph, False)) for ph in [
-            SmilePhase.REALITY_EMULATION,
-            SmilePhase.CONCURRENT_ENGINEERING,
-            SmilePhase.COLLECTIVE_INTELLIGENCE,
-            SmilePhase.CONTEXTUAL_INTELLIGENCE,
-            SmilePhase.CONTINUOUS_INTELLIGENCE,
-            SmilePhase.PERPETUAL_WISDOM,
-        ]]
+        scores = [
+            score_goal(_goal(5, ph, False))
+            for ph in [
+                SmilePhase.REALITY_EMULATION,
+                SmilePhase.CONCURRENT_ENGINEERING,
+                SmilePhase.COLLECTIVE_INTELLIGENCE,
+                SmilePhase.CONTEXTUAL_INTELLIGENCE,
+                SmilePhase.CONTINUOUS_INTELLIGENCE,
+                SmilePhase.PERPETUAL_WISDOM,
+            ]
+        ]
         for i in range(len(scores) - 1):
-            assert (
-                scores[i] < scores[i + 1]
-            ), (
-                f"Phase {i} score {scores[i]} should be < "
-                f"{scores[i+1]}"
+            assert scores[i] < scores[i + 1], (
+                f"Phase {i} score {scores[i]} should be < {scores[i + 1]}"
             )
 
     def test_deterministic(self) -> None:
@@ -262,6 +265,7 @@ class TestScoreGoalProperties:
 
 
 # ── Sort behaviour ────────────────────────────────────────────────────────────
+
 
 class TestSortGoalsByScore:
     def test_empty_returns_empty(self) -> None:
@@ -318,6 +322,7 @@ class TestSortGoalsByScore:
 
 
 # ── Score explanation ─────────────────────────────────────────────────────────
+
 
 class TestScoreExplanation:
     def test_returns_non_empty_string(self) -> None:

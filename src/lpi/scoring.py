@@ -46,19 +46,19 @@ from lpi.models import Goal, SmilePhase
 
 # ── Formula weights (lead-approved — change only with lead sign-off) ──────────
 
-PRIORITY_WEIGHT: float = 0.5   # 50% — the user's explicit importance rating
-PHASE_WEIGHT: float = 0.3      # 30% — SMILE phase progress (how far along)
-URGENCY_WEIGHT: float = 0.2    # 20% — time-sensitive binary override
+PRIORITY_WEIGHT: float = 0.5  # 50% — the user's explicit importance rating
+PHASE_WEIGHT: float = 0.3  # 30% — SMILE phase progress (how far along)
+URGENCY_WEIGHT: float = 0.2  # 20% — time-sensitive binary override
 
 # ── Corrected 6-phase weights (from smile-framework.json phase `order`) ───────
 
 PHASE_WEIGHTS: dict[SmilePhase, int] = {
-    SmilePhase.REALITY_EMULATION: 1,       # Establishing the reality canvas
+    SmilePhase.REALITY_EMULATION: 1,  # Establishing the reality canvas
     SmilePhase.CONCURRENT_ENGINEERING: 2,  # Defining scope, validating virtually
-    SmilePhase.COLLECTIVE_INTELLIGENCE: 3, # Sensors, ontologies, KPIs connected
-    SmilePhase.CONTEXTUAL_INTELLIGENCE: 4, # Real-time decisions, connected twin
-    SmilePhase.CONTINUOUS_INTELLIGENCE: 5, # AI prognostics, simulation
-    SmilePhase.PERPETUAL_WISDOM: 6,        # Sharing impact, circular strategies
+    SmilePhase.COLLECTIVE_INTELLIGENCE: 3,  # Sensors, ontologies, KPIs connected
+    SmilePhase.CONTEXTUAL_INTELLIGENCE: 4,  # Real-time decisions, connected twin
+    SmilePhase.CONTINUOUS_INTELLIGENCE: 5,  # AI prognostics, simulation
+    SmilePhase.PERPETUAL_WISDOM: 6,  # Sharing impact, circular strategies
 }
 # Each step in this dict corresponds to the JSON `order` field (1–6).
 # Perpetual Wisdom = 6 (highest) because goals at this phase represent
@@ -66,6 +66,7 @@ PHASE_WEIGHTS: dict[SmilePhase, int] = {
 
 
 # ── Core scoring function ──────────────────────────────────────────────────────
+
 
 def score_goal(goal: Goal) -> float:
     """Compute the SMILE-weighted composite score for a single goal.
@@ -75,18 +76,19 @@ def score_goal(goal: Goal) -> float:
     Output: float in [0.80, 7.00], rounded to 2 decimal places.
     Higher score = surface this goal earlier in sorted lists.
     """
-    phase_w = PHASE_WEIGHTS[goal.smile_phase]   # integer 1–6
-    urgency = int(goal.urgency_flag)             # 1 if True, 0 if False
+    phase_w = PHASE_WEIGHTS[goal.smile_phase]  # integer 1–6
+    urgency = int(goal.urgency_flag)  # 1 if True, 0 if False
 
     raw = (
-        (goal.priority * PRIORITY_WEIGHT)        # e.g. 5 × 0.5 = 2.50
-        + (phase_w * PHASE_WEIGHT)               # e.g. 3 × 0.3 = 0.90
-        + (urgency * URGENCY_WEIGHT)             # e.g. 1 × 0.2 = 0.20
-    )                                            # total:          3.60
+        (goal.priority * PRIORITY_WEIGHT)  # e.g. 5 × 0.5 = 2.50
+        + (phase_w * PHASE_WEIGHT)  # e.g. 3 × 0.3 = 0.90
+        + (urgency * URGENCY_WEIGHT)  # e.g. 1 × 0.2 = 0.20
+    )  # total:          3.60
     return round(raw, 2)
 
 
 # ── Human-readable explanation ─────────────────────────────────────────────────
+
 
 def score_explanation(goal: Goal) -> str:
     """Return a one-sentence SMILE-grounded explanation of a goal's score.
@@ -117,6 +119,7 @@ def score_explanation(goal: Goal) -> str:
 
 
 # ── Sort helper ────────────────────────────────────────────────────────────────
+
 
 def sort_goals_by_score(goals: list[Goal]) -> list[Goal]:
     """Return goals sorted by composite score descending.

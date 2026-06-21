@@ -125,14 +125,19 @@ class TestUpdateGoal:
 
     def test_patch_title_does_not_reset_urgency_flag(self, client) -> None:
         """Task C: Patching title only must NOT reset urgency_flag to False."""
-        goal_id = client.post("/api/v1/goals/", json={
-            "title": "Original", "priority": 5,
-            "smile_phase": "reality-emulation", "urgency_flag": True,
-        }).json()["id"]
+        goal_id = client.post(
+            "/api/v1/goals/",
+            json={
+                "title": "Original",
+                "priority": 5,
+                "smile_phase": "reality-emulation",
+                "urgency_flag": True,
+            },
+        ).json()["id"]
 
         patch_resp = client.patch(f"/api/v1/goals/{goal_id}", json={"title": "Updated"})
         assert patch_resp.status_code == 200
-        assert patch_resp.json()["urgency_flag"] is True   # must not have been reset
+        assert patch_resp.json()["urgency_flag"] is True  # must not have been reset
 
 
 class TestDeleteGoal:
@@ -146,7 +151,7 @@ class TestDeleteGoal:
         assert delete_resp.status_code == 200
         body = delete_resp.json()
         assert body["deleted"] is True
-        assert body["id"] == goal_id   # field is `id` not `goal_id` — matches OpenAPI
+        assert body["id"] == goal_id  # field is `id` not `goal_id` — matches OpenAPI
 
         get_resp = client.get(f"/api/v1/goals/{goal_id}")
         assert get_resp.status_code == 404

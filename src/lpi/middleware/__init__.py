@@ -83,9 +83,9 @@ def register_middleware(app: FastAPI) -> None:
       RateLimitMiddleware — enforces per-IP request limits (429 on breach)
       CORSMiddleware      — handles CORS pre-flight (outermost, runs first)
     """
-    app.add_middleware(TimingMiddleware)    # inner: measures route time only
-    app.add_middleware(RateLimitMiddleware) # middle: rate-limits before routing
-    app.add_middleware(                     # outer: handles CORS pre-flight
+    app.add_middleware(TimingMiddleware)  # inner: measures route time only
+    app.add_middleware(RateLimitMiddleware)  # middle: rate-limits before routing
+    app.add_middleware(  # outer: handles CORS pre-flight
         CORSMiddleware,
         allow_origins=["*"],  # Phase 3: restrict to frontend URL
         allow_credentials=True,

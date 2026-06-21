@@ -7,9 +7,14 @@ class Settings(BaseSettings):
     supabase_key: str = ""
     supabase_service_role_key: str = ""
     supabase_jwt_secret: str = ""
-    llm_provider: str = "anthropic"
-    llm_model: str = "claude-sonnet-4-20250514"
+    # ── LLM provider selection ────────────────────────────────────────────────
+    # llm_provider: "groq" (default, free tier) or "anthropic" (when we have
+    # a paid Claude API key). Switch by setting LLM_PROVIDER in .env.
+    # See src/lpi/langgraph_agent.py for how the provider is selected.
+    llm_provider: str = "groq"
+    llm_model: str = "llama-3.3-70b-versatile"
     anthropic_api_key: str = ""
+    groq_api_key: str = ""
     daily_cost_cap_usd: float = 10.0
     github_client_id: str = ""
     github_client_secret: str = ""
@@ -26,6 +31,8 @@ class Settings(BaseSettings):
         "supabase_key",
         "supabase_service_role_key",
         "supabase_jwt_secret",
+        "anthropic_api_key",
+        "groq_api_key",
         mode="before",
     )
     @classmethod

@@ -91,6 +91,7 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 # ── GitHub event → LPI signal mapping ────────────────────────────────────────
 
+
 def map_github_event(event: dict) -> dict | None:
     """Convert a raw GitHub event dict to an LPI SignalCreate payload.
 
@@ -227,6 +228,7 @@ def map_github_event(event: dict) -> dict | None:
 
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
 
+
 def fetch_github_events() -> list[dict]:
     """Call the GitHub Events API and return the raw events list.
 
@@ -276,9 +278,7 @@ def post_signal(signal_payload: dict) -> bool:
         response = requests.post(url, json=signal_payload, timeout=5)
         if response.status_code in (200, 201):
             return True
-        print(
-            f"  [lpi] WARN: POST returned {response.status_code}: {response.text[:100]}"
-        )
+        print(f"  [lpi] WARN: POST returned {response.status_code}: {response.text[:100]}")
         return False
     except requests.exceptions.ConnectionError:
         print(f"  [lpi] ERROR: Cannot connect to {LPI_API_BASE}.")
@@ -290,6 +290,7 @@ def post_signal(signal_payload: dict) -> bool:
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     print("=" * 60)

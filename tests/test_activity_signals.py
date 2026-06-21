@@ -294,7 +294,7 @@ class TestIngestSignal:
         """
         with patch(
             "lpi.routers.signals.log_user_activity",
-            return_value=None,   # no-op mock; never raises by contract
+            return_value=None,  # no-op mock; never raises by contract
         ):
             response = client.post(
                 "/api/v1/signals/",

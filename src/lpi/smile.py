@@ -21,12 +21,12 @@ from lpi.models import SmilePhase
 # on this list to determine whether a transition is a forward step,
 # a skip, or a backward step.
 PHASE_ORDER: list[SmilePhase] = [
-    SmilePhase.REALITY_EMULATION,      # order 1 — establish the reality canvas
+    SmilePhase.REALITY_EMULATION,  # order 1 — establish the reality canvas
     SmilePhase.CONCURRENT_ENGINEERING,  # order 2 — define scope, validate virtually
-    SmilePhase.COLLECTIVE_INTELLIGENCE, # order 3 — sensors, ontologies, KPIs
-    SmilePhase.CONTEXTUAL_INTELLIGENCE, # order 4 — real-time decisions, connected twin
-    SmilePhase.CONTINUOUS_INTELLIGENCE, # order 5 — AI-driven prognostics, simulation
-    SmilePhase.PERPETUAL_WISDOM,        # order 6 — share impact, circular strategies
+    SmilePhase.COLLECTIVE_INTELLIGENCE,  # order 3 — sensors, ontologies, KPIs
+    SmilePhase.CONTEXTUAL_INTELLIGENCE,  # order 4 — real-time decisions, connected twin
+    SmilePhase.CONTINUOUS_INTELLIGENCE,  # order 5 — AI-driven prognostics, simulation
+    SmilePhase.PERPETUAL_WISDOM,  # order 6 — share impact, circular strategies
 ]
 
 
@@ -52,15 +52,15 @@ def validate_phase_transition(current: SmilePhase, target: SmilePhase) -> bool:
     target_idx = PHASE_ORDER.index(target)
 
     if target_idx == current_idx + 1:
-        return True   # ✓ forward one step
+        return True  # ✓ forward one step
 
     if target_idx < current_idx:
-        return True   # ✓ backward — re-evaluation is always valid in SMILE
+        return True  # ✓ backward — re-evaluation is always valid in SMILE
 
     if target_idx == current_idx:
         return False  # ✗ no-op
 
-    return False      # ✗ skip forward (target_idx > current_idx + 1)
+    return False  # ✗ skip forward (target_idx > current_idx + 1)
 
 
 def get_phase_description(phase: SmilePhase) -> str:

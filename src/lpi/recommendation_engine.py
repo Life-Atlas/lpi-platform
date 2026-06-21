@@ -107,14 +107,14 @@ def generate_recommendations(user_id: str) -> list[Recommendation]:
 
     # ── Fallback: Wave 2 deterministic Phase 1 engine ───────────────────────
     # Reached when the LLM is unavailable, errored, or returned bad JSON.
-    candidates: list[Recommendation] = []
-    candidates.extend(_goal_recommendations(user_id, goals))
+    fallback_candidates: list[Recommendation] = []
+    fallback_candidates.extend(_goal_recommendations(user_id, goals))
 
     signal_rec = _signal_recommendation(user_id, signals)
     if signal_rec is not None:
-        candidates.append(signal_rec)
+        fallback_candidates.append(signal_rec)
 
-    return _diversify_by_phase(candidates)
+    return _diversify_by_phase(fallback_candidates)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -177,6 +177,7 @@ def _try_langgraph_recommendations(
 
             # ── Derive phase + priority deterministically from source data ──
             if source_goals:
+                assert source_goal_id is not None  # guaranteed by the in-check above
                 goal = goals_by_id[source_goal_id]
                 target_phase = _next_phase(goal.smile_phase) or goal.smile_phase
                 phase = target_phase

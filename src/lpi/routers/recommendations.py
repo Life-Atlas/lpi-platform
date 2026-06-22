@@ -122,8 +122,8 @@ def get_recommendations(
     description=(
         "Executes the multi-step LangGraph orchestration pipeline: "
         "fetch → classify → reason (LLM) → validate → enrich → finalise. "
-        "**Guaranteed to return exactly `n_cards` output cards** — even if the LLM "
-        "is unavailable, returns bad JSON, or the DB is unreachable. "
+        "Always returns the **top 3 recommendations** sorted by priority — "
+        "even if the LLM is unavailable, returns bad JSON, or the DB is unreachable. "
         "The pipeline retries failed LLM output once with a simplified prompt before "
         "falling back to the deterministic Wave 2 engine, and finally to cold-start "
         "cards. This is the Phase 4 demo-safe endpoint."
@@ -131,24 +131,15 @@ def get_recommendations(
 )
 def run_recommendation_pipeline(
     user_id: str,
-    n_cards: int = Query(
-        default=3,
-        ge=1,
-        le=10,
-        description=(
-            "Number of output cards to return (1–10). "
-            "Demo gate requires exactly 3. "
-            "The pipeline is guaranteed to return this many cards."
-        ),
-        alias="limit",
-    ),
     _caller_id: str = Depends(get_current_user),
 ) -> list[Recommendation]:
     """Run the full multi-step agent orchestration pipeline.
 
-    Unlike the GET endpoint (which calls generate_recommendations() directly),
-    this endpoint runs the explicit multi-node pipeline graph:
+    Always returns exactly the top 3 recommendations for the user,
+    sorted by priority descending. No limit parameter — 3 cards is
+    the fixed contract for this endpoint.
 
+    The pipeline runs through 7 nodes:
       1. fetch    — loads user's goals + signals from Supabase
       2. classify — routes to LLM path or cold-start/fallback
       3. reason   — runs the LangGraph LLM agent (Groq/Anthropic)
@@ -156,9 +147,9 @@ def run_recommendation_pipeline(
       5. enrich   — converts validated LLM output → Recommendation objects
                     (falls back to deterministic engine if LLM invalid)
       6. fallback — guaranteed cold-start 3 cards if route != llm
-      7. finalise — pads to n_cards, sorts by priority DESC, slices
+      7. finalise — deduplicates, sorts by priority DESC, pads to 3
 
-    DEMO GUARANTEE: this endpoint always returns exactly n_cards (default 3)
-    Recommendation objects, regardless of LLM availability or data state.
+    DEMO GUARANTEE: always returns exactly 3 Recommendation objects
+    regardless of LLM availability, DB state, or user data.
     """
-    return run_pipeline(user_id, n_cards=n_cards)
+    return run_pipeline(user_id, n_cards=3)

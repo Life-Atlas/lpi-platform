@@ -49,7 +49,7 @@ Examples of future nodes:
 from __future__ import annotations
 
 import logging
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from lpi import store
 from lpi.models import Goal, Recommendation, Signal
@@ -418,7 +418,7 @@ def _build_pipeline_graph():
 _pipeline_graph = None
 
 
-def _get_pipeline() -> object:
+def _get_pipeline() -> Any:
     global _pipeline_graph
     if _pipeline_graph is None:
         _pipeline_graph = _build_pipeline_graph()

@@ -49,21 +49,18 @@ Examples of future nodes:
 from __future__ import annotations
 
 import logging
-import uuid
-from datetime import UTC, datetime
 from typing import TypedDict
 
 from lpi import store
-from lpi.models import Goal, Recommendation, Signal, SmilePhase
+from lpi.models import Goal, Recommendation, Signal
 from lpi.recommendation_engine import (
     _diversify_by_phase,
     _goal_recommendations,
     _signal_recommendation,
-    build_cold_start_recommendations,
     _try_langgraph_recommendations,
+    build_cold_start_recommendations,
 )
 from lpi.scoring import sort_goals_by_score
-from lpi.smile import PHASE_ORDER
 
 logger = logging.getLogger(__name__)
 

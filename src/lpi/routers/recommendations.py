@@ -56,6 +56,7 @@ hasn't finished in time.
 
 from fastapi import APIRouter, Depends, Query
 
+from lpi.agent_pipeline import run_pipeline
 from lpi.middleware.auth import get_current_user
 from lpi.models import Recommendation
 from lpi.recommendation_engine import build_cold_start_recommendations, generate_recommendations
@@ -112,3 +113,52 @@ def get_recommendations(
         key=lambda r: -r.priority,
     )
     return recommendations[:limit]
+
+
+@router.post(
+    "/{user_id}/run",
+    response_model=list[Recommendation],
+    summary="Run the full agent orchestration pipeline for a user",
+    description=(
+        "Executes the multi-step LangGraph orchestration pipeline: "
+        "fetch → classify → reason (LLM) → validate → enrich → finalise. "
+        "**Guaranteed to return exactly `n_cards` output cards** — even if the LLM "
+        "is unavailable, returns bad JSON, or the DB is unreachable. "
+        "The pipeline retries failed LLM output once with a simplified prompt before "
+        "falling back to the deterministic Wave 2 engine, and finally to cold-start "
+        "cards. This is the Phase 4 demo-safe endpoint."
+    ),
+)
+def run_recommendation_pipeline(
+    user_id: str,
+    n_cards: int = Query(
+        default=3,
+        ge=1,
+        le=10,
+        description=(
+            "Number of output cards to return (1–10). "
+            "Demo gate requires exactly 3. "
+            "The pipeline is guaranteed to return this many cards."
+        ),
+        alias="limit",
+    ),
+    _caller_id: str = Depends(get_current_user),
+) -> list[Recommendation]:
+    """Run the full multi-step agent orchestration pipeline.
+
+    Unlike the GET endpoint (which calls generate_recommendations() directly),
+    this endpoint runs the explicit multi-node pipeline graph:
+
+      1. fetch    — loads user's goals + signals from Supabase
+      2. classify — routes to LLM path or cold-start/fallback
+      3. reason   — runs the LangGraph LLM agent (Groq/Anthropic)
+      4. validate — checks LLM output quality; retries once if invalid
+      5. enrich   — converts validated LLM output → Recommendation objects
+                    (falls back to deterministic engine if LLM invalid)
+      6. fallback — guaranteed cold-start 3 cards if route != llm
+      7. finalise — pads to n_cards, sorts by priority DESC, slices
+
+    DEMO GUARANTEE: this endpoint always returns exactly n_cards (default 3)
+    Recommendation objects, regardless of LLM availability or data state.
+    """
+    return run_pipeline(user_id, n_cards=n_cards)

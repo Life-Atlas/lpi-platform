@@ -133,19 +133,38 @@ Recommendation:
 
 ### How Signals feed into Recommendations
 
-Signals can now be either **user-scoped** (general activity) or **goal-scoped** (linked to a specific goal):
+Signals can now be either **user-scoped** (general activity) or **goal-scoped** (linked to a specific goal). They arrive via three paths:
 
 ```
-Signal (user-scoped)                   Signal (goal-scoped) ← NEW
-  stream: "boardy"                       stream: "lpi"
-  event_type: "match_created"            event_type: "pr_merged"
+GitHub Event (PR merged, commit pushed, PR reviewed)
+    │  POST /api/v1/webhooks/github  (no JWT — GitHub calls this)
+    │  user_id resolved from repo_db (populated at track-repo time)
+    │  source = "github_webhook"
+    ▼
+POST /api/v1/signals/  (manual / Boardy / any external source)
+    │  JWT required
+    │  source = "api" | "boardy_webhook" | "github_api" | "manual"
+    ▼
+activity_signals table
+    stream, event_type, payload, source, user_id, goal_id (optional FK)
+    │
+    ▼
+store.list_signals(user_id, limit=20)  ← recommendation engine reads these
+```
+
+Signal (user-scoped) vs Signal (goal-scoped):
+
+```
+Signal (user-scoped)                   Signal (goal-scoped)
+  stream: "lpi"                          stream: "lpi"
+  event_type: "pr_merged"                event_type: "pr_merged"
   goal_id: null                          goal_id: "<goal-uuid>"  ← FK to goals
-  source: "boardy_webhook"               source: "github_api"
+  source: "github_webhook"               source: "github_webhook"
        │                                      │
        ▼                                      ▼
 General signal recommendation         Goal-specific recommendation
-  phase: collective-intelligence        (surfaces alongside that specific goal)
-  source_signals: ["<signal-id>"]       source_goals + source_signals both set
+  phase: collective-intelligence        source_goals + source_signals both set
+  source_signals: ["<signal-id>"]
 ```
 
 When recommendations are generated:
@@ -283,44 +302,53 @@ User sees recommendation card
 
 ```
 1. User logs in via Supabase Auth → gets JWT
-2. User creates goal:
+
+2. User connects GitHub repo:
+   POST /api/v1/github/track-repo
+   → registers webhook on GitHub
+   → stores repo_db["owner/repo"] = user_id  ← maps repo to user
+
+3. User creates goal:
    POST /api/v1/goals/
    → stored in goals table (user_id from JWT)
    → logged: user_activity_logs (action=goal_created)
    → logged: goal_phase_transitions (if phase changes)
 
-3. GitHub merges PR → webhook fires:
-   POST /api/v1/webhooks/github
-   → parsed as event_type=pr_merged
-   → stored: activity_signals (stream=lpi, source=github_webhook,
-                                goal_id=<goal-uuid> if linked)
+4. GitHub merges PR → webhook fires automatically:
+   POST /api/v1/webhooks/github  (GitHub calls this, no JWT)
+   → event_type = "pull_request", action = "closed", merged = true
+   → user_id resolved from repo_db["owner/repo"]
+   → Signal saved to activity_signals:
+       stream="lpi", event_type="pr_merged",
+       source="github_webhook", user_id=<resolved>
    → logged: user_activity_logs (action=signal_ingested)
+   ← returns {"status": "success"} to GitHub
 
-4a. General recommendations:
+5a. General recommendations:
     GET /api/v1/recommendations/{user_id}
     → loads ALL goals + signals
     → deterministic engine: one rec per goal (advance phase)
-                            + one rec per signal cluster
+                            + one rec for signals cluster
     → returns top 3 by priority
 
-4b. Pipeline recommendations (demo-safe):
+5b. Pipeline recommendations (demo-safe):
     POST /api/v1/recommendations/{user_id}/run
     → 7-node pipeline (fetch/classify/reason/validate/enrich/fallback/finalise)
     → LLM generates natural language action + reasoning
-    → deterministic engine derives phase + priority (LLM just writes the text)
+    → deterministic engine derives phase + priority
     → always returns exactly 3 cards
 
-4c. Goal-scoped recommendations (NEW):
+5c. Goal-scoped recommendations:
     POST /api/v1/recommendations/{user_id}/by-goal/{goal_id}
     → loads ONE goal + ONLY its linked signals
-    → LangGraph agent reasons over goal + specific signals
     → returns up to 3 cards focused on that goal
 
-5. Frontend renders recommendation cards
+6. Frontend renders recommendation cards
 
-6. User clicks Accept:
+7. User clicks Accept:
    POST /api/v1/recommendations/{user_id}/feedback
    → stored: recommendation_feedback (status=accepted)
+   → future engine reads dismissed recs to avoid re-surfacing
 ```
 
 ---
@@ -784,7 +812,7 @@ All endpoints require `Authorization: Bearer <supabase-jwt>` except `/health`.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/api/v1/webhooks/github` | None | GitHub webhook receiver (push, pull_request, pull_request_review) |
+| `POST` | `/api/v1/webhooks/github` | None (shared secret) | GitHub webhook receiver — parses push/PR/review events, **persists to `activity_signals` table** with user_id resolved from repo ownership |
 
 ### GitHub Auth — `/api/v1/github`
 
@@ -792,9 +820,11 @@ All endpoints require `Authorization: Bearer <supabase-jwt>` except `/health`.
 |--------|------|------|-------------|
 | `POST` | `/api/v1/github/exchange-token` | None | Trade GitHub OAuth code for access token |
 | `GET` | `/api/v1/github/user-repositories/{user_id}` | None | List user's GitHub repos |
-| `POST` | `/api/v1/github/track-repo` | None | Auto-register webhook on a selected repo |
-| `POST` | `/api/v1/github/disconnect-repo` | None | Remove webhook + clear token |
+| `POST` | `/api/v1/github/track-repo` | None | Register webhook on repo + store `repo_db["owner/repo"] = user_id` |
+| `POST` | `/api/v1/github/disconnect-repo` | None | Remove webhook + clear repo mapping from `repo_db` |
 | `POST` | `/api/v1/github/disconnect-account/{user_id}` | None | Remove stored token for a user |
+
+> **How `repo_db` connects GitHub to Signals:** When a user registers a repo via `track-repo`, their `user_id` is stored against `"owner/repo"` in memory. When GitHub fires a webhook, the receiver looks up `repo_db["owner/repo"]` to resolve the `user_id` and save the signal under the correct user — replacing the old `default_user` stub.
 
 ---
 

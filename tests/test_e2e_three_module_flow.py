@@ -40,9 +40,6 @@ Run with:
     pytest tests/test_e2e_three_module_flow.py -v --tb=short
 """
 
-import json
-
-import pytest
 from fastapi.testclient import TestClient
 
 from lpi.main import app

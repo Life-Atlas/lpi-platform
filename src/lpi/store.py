@@ -368,6 +368,40 @@ def get_user_activity_logs(
         query = query.eq("action", action)
     return cast(list[dict], query.execute().data)  # ← always reached
 
+def list_goal_phase_transitions(user_id: str | None = None) -> list[dict]:
+    """Read rows from the goal_phase_transitions Supabase table.
+
+    WHY THIS EXISTS
+    ─────────────────
+    Mirrors get_user_activity_logs() above, but for the OTHER audit table
+    Yashika's logging design specifies: goal_phase_transitions (written by
+    utils/logging.py::log_transition() on every SMILE phase change).
+
+    Used by GET /api/v1/metrics/team (routers/metrics.py) to compute each
+    user's `goal_advances` count — see that file for why only FORWARD
+    transitions count toward "advances".
+
+    No Pydantic model wraps this table (unlike Signal/Goal) because it's
+    an audit log, not a primary domain entity — raw dicts are fine for an
+    internal aggregation pass that only reads a few known keys
+    (user_id, from_phase, to_phase, transitioned_at).
+
+    Args:
+        user_id : Optional filter to one user's transitions. None (default)
+                  returns every transition for every user — the admin-wide
+                  view the team metrics endpoint needs.
+
+    Returns:
+        Raw list of matching rows (dicts). No pagination — at current team
+        scale (a handful of goals, single-digit phase changes per goal)
+        this table will stay small for a long time. Add limit/offset the
+        same way list_signals() does if that stops being true.
+    """
+    query = _get_client().table("goal_phase_transitions").select("*")
+    if user_id:
+        query = query.eq("user_id", user_id)
+    return cast(list[dict], query.execute().data)
+
 # ── Recommendation Feedback ─────────────────────────────────────────────
 def insert_recommendation_feedback(
     feedback: RecommendationFeedback,
@@ -424,7 +458,8 @@ def get_recommendation_feedback(
 
 
 def clear_all() -> None:
-    """Wipe all data from goals and activity_signals. Call ONLY from tests.
+    """Wipe all data from goals, activity_signals, and goal_phase_transitions.
+    Call ONLY from tests.
 
     WHY .neq("user_id", "__sentinel_never_exists__")?
     ───────────────────────────────────────────────────
@@ -439,16 +474,28 @@ def clear_all() -> None:
     This is called before AND after every test by the autouse fixture
     in conftest.py, so tests never see each other's data.
 
-    NOTE: this does NOT wipe user_activity_logs. If you add a test that
-    relies on a clean audit-log table between runs (e.g. counting rows
-    rather than filtering by resource_id), wipe it the same way here.
-    The current regression test avoids this by filtering on resource_id,
-    which is unique per signal and doesn't require a clean table.
+    goal_phase_transitions ADDED (Priority 1 — Team Metrics)
+    ───────────────────────────────────────────────────────────
+    This table previously had no test that read it back in an assertion —
+    log_transition() writes it, but nothing queried it, so a dirty table
+    was harmless. store.list_goal_phase_transitions() (added for
+    GET /api/v1/metrics/team) now reads it directly, and stale rows from
+    earlier test/manual runs were leaking into goal_advances / last_active
+    counts, breaking test isolation. Wiping it here closes that gap.
+
+    NOTE: this still does NOT wipe user_activity_logs or system_logs — no
+    test currently asserts against a clean state for those tables. Add
+    the same .neq() pattern here if that ever becomes necessary.
     """
     # Wipe all goals rows
     _get_client().table("goals").delete().neq("user_id", "__sentinel_never_exists__").execute()
 
     # Wipe all activity_signals rows (Phase 3 addition)
     _get_client().table("activity_signals").delete().neq(
+        "user_id", "__sentinel_never_exists__"
+    ).execute()
+
+    # Wipe all goal_phase_transitions rows (Priority 1 — Team Metrics addition)
+    _get_client().table("goal_phase_transitions").delete().neq(
         "user_id", "__sentinel_never_exists__"
     ).execute()

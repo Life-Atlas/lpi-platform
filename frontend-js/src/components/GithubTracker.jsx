@@ -12,6 +12,9 @@ export const GithubTracker = ({ userId }) => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [trackingStatus, setTrackingStatus] = useState({}); // { repoFullName: "success" | "error" | "loading" }
+  const [customRepo, setCustomRepo] = useState("");
+  const [customLoading, setCustomLoading] = useState(false);
+  const [customDisconnectLoading, setCustomDisconnectLoading] = useState(false);
 
   const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
 
@@ -96,6 +99,78 @@ export const GithubTracker = ({ userId }) => {
       }, 50);
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleTrackCustomRepo = async () => {
+    if (!userId || !customRepo.trim()) return;
+    const parts = customRepo.trim().split("/");
+    if (parts.length !== 2) {
+      showToast("Please enter in owner/repo format (e.g. facebook/react)", "error");
+      return;
+    }
+    const [owner, name] = parts;
+    const fullName = `${owner}/${name}`;
+    setCustomLoading(true);
+    try {
+      // Step 1: Validate repository is public using our validate-public-repo endpoint
+      await goalApi.validatePublicRepo(owner, name);
+      
+      // Step 2: Track it
+      await goalApi.trackGithubRepository(userId, owner, name);
+      
+      // Step 3: Add to tracked repos in localStorage and trackingStatus state
+      const storageKey = `tracked_repos_${userId}`;
+      const activeList = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      if (!activeList.includes(fullName)) {
+        activeList.push(fullName);
+        localStorage.setItem(storageKey, JSON.stringify(activeList));
+      }
+      setTrackingStatus((prev) => ({ ...prev, [fullName]: "success" }));
+      
+      showToast(`Successfully tracked and synced signals for ${fullName}!`, "success");
+      setCustomRepo("");
+      fetchRepositories();
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || "Failed to track custom repository.", "error");
+    } finally {
+      setCustomLoading(false);
+    }
+  };
+
+  const handleDisconnectCustomRepo = async () => {
+    if (!userId || !customRepo.trim()) return;
+    const parts = customRepo.trim().split("/");
+    if (parts.length !== 2) {
+      showToast("Please enter in owner/repo format (e.g. facebook/react)", "error");
+      return;
+    }
+    const [owner, name] = parts;
+    const fullName = `${owner}/${name}`;
+    setCustomDisconnectLoading(true);
+    try {
+      await goalApi.disconnectGithubRepository(userId, owner, name);
+      
+      setTrackingStatus((prev) => {
+        const next = { ...prev };
+        delete next[fullName];
+        return next;
+      });
+      
+      const storageKey = `tracked_repos_${userId}`;
+      const activeList = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      const filteredList = activeList.filter((name) => name !== fullName);
+      localStorage.setItem(storageKey, JSON.stringify(filteredList));
+      
+      showToast(`Successfully disconnected from ${fullName}.`, "success");
+      setCustomRepo("");
+      fetchRepositories();
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || "Failed to disconnect custom repository.", "error");
+    } finally {
+      setCustomDisconnectLoading(false);
     }
   };
 
@@ -205,6 +280,56 @@ export const GithubTracker = ({ userId }) => {
         </div>
       ) : (
         <div className="github-repos-dashboard">
+          {/* Custom Repository Tracking Panel */}
+          <div style={{ display: "flex", gap: "10px", marginBottom: "20px", background: "rgba(255, 255, 255, 0.03)", padding: "15px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.08)", alignItems: "center" }}>
+            <div style={{ flex: 1 }}>
+              <input
+                type="text"
+                placeholder="Track any public repository (e.g. facebook/react)"
+                className="github-search-input"
+                style={{ width: "100%", margin: 0, padding: "8px 12px" }}
+                value={customRepo}
+                onChange={(e) => setCustomRepo(e.target.value)}
+              />
+            </div>
+            <button
+              className="github-track-btn"
+              style={{ margin: 0, padding: "8px 20px", height: "auto", fontSize: "0.85rem" }}
+              onClick={handleTrackCustomRepo}
+              disabled={customLoading}
+            >
+              {customLoading ? (
+                <>
+                  <span className="button-spinner"></span> Syncing...
+                </>
+              ) : (
+                "🔗 Track Custom Repo"
+              )}
+            </button>
+            <button
+              className="github-track-btn untrack-btn"
+              style={{ 
+                margin: 0, 
+                padding: "8px 20px", 
+                height: "auto", 
+                fontSize: "0.85rem",
+                background: "rgba(239, 68, 68, 0.15)",
+                borderColor: "#ef4444",
+                color: "#ef4444"
+              }}
+              onClick={handleDisconnectCustomRepo}
+              disabled={customDisconnectLoading}
+            >
+              {customDisconnectLoading ? (
+                <>
+                  <span className="button-spinner"></span> Disconnecting...
+                </>
+              ) : (
+                "✕ Disconnect Custom Repo"
+              )}
+            </button>
+          </div>
+
           <div className="github-toolbar">
             <input
               type="text"

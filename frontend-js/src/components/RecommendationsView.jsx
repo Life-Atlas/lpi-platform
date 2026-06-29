@@ -140,18 +140,20 @@ export const RecommendationsView = ({ userId, onGoalCreated, goals = [] }) => {
         <div className="empty-state recommendations-empty">
           <div className="empty-icon">💡</div>
           <h3>No Recommendations Available</h3>
-          <p>
-            Run the AI Orchestration Engine above to evaluate your activity timeline and generate new next-step cards.
+          <p style={{ marginBottom: "20px" }}>
+            To get recommendations, add repositories to your goals and sync signals.
           </p>
         </div>
       ) : (
         <div className="recommendations-grid">
-          {recommendations.map((rec) => {
-            const isSlideOut = feedbackStatus[rec.id];
-            const isExpanded = expandedCard === rec.id;
-            const associatedGoal = goals.find(
-              (g) => rec.source_goals && rec.source_goals.includes(g.id)
-            );
+          {recommendations
+            .filter((rec) => goals.some((g) => rec.source_goals && rec.source_goals.includes(g.id)))
+            .map((rec) => {
+              const isSlideOut = feedbackStatus[rec.id];
+              const isExpanded = expandedCard === rec.id;
+              const associatedGoal = goals.find(
+                (g) => rec.source_goals && rec.source_goals.includes(g.id)
+              );
 
             return (
               <div

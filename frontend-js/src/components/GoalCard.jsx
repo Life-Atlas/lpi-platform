@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { goalApi } from "../api";
+import { useToast } from "./Toast";
 
 const PHASE_SEQUENCE = [
   "reality-emulation",
@@ -43,12 +44,86 @@ const computeScore = (goal) => {
   return Math.round(((goal.priority * 0.5) + (phaseW * 0.3) + (urgency * 0.2)) * 100) / 100;
 };
 
-export const GoalCard = ({ goal, onGoalUpdated, isAdminView, usersMap = {} }) => {
+export const GoalCard = ({ goal, onGoalUpdated, isAdminView, usersMap = {}, userId }) => {
   const api = goalApi;
+  const { showToast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isGettingRec, setIsGettingRec] = useState(false);
+  const [recommendation, setRecommendation] = useState(null);
+  const [showRecCard, setShowRecCard] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
   const score = computeScore(goal);
+
+  const rawDescription = goal.description || "";
+  const githubRepoMatch = rawDescription.match(/\[github_repo:\s*([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)\]/) || rawDescription.match(/\b([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)\b/);
+  
+  const githubRepo = githubRepoMatch ? githubRepoMatch[1] : null;
+
+  const cleanDescription = rawDescription.replace(/\[github_repo:\s*([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)\]/, "").trim();
+
+  const handleSyncSignals = async () => {
+    if (!githubRepo) return;
+    setIsSyncing(true);
+    try {
+      const res = await api.syncGithubEvents(goal.id, githubRepo);
+      showToast(`Successfully synced ${res.ingested_high_value || 0} signals from ${githubRepo}!`, "success");
+    } catch (err) {
+      console.error("Failed to sync GitHub events:", err);
+      showToast(err.message || "Failed to sync signals.", "error");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+
+
+  const handleGetRecommendation = async () => {
+    if (!userId) return;
+    setIsGettingRec(true);
+    setRecommendation(null);
+    try {
+      const recs = await api.getRecommendationsByGoal(userId, goal.id);
+      if (recs && recs.length > 0) {
+        setRecommendation(recs[0]);
+        setShowRecCard(true);
+        showToast("AI reasoning completed! Recommendation generated.", "success");
+      } else {
+        showToast("No recommendations generated. Try syncing more signals first!", "info");
+      }
+    } catch (err) {
+      console.error("Failed to generate per-goal recommendation:", err);
+      showToast(err.message || "Failed to generate recommendation.", "error");
+    } finally {
+      setIsGettingRec(false);
+    }
+  };
+
+  const handleRecFeedback = async (actionStatus) => {
+    if (!userId || !recommendation) return;
+    try {
+      await api.submitRecommendationFeedback(userId, {
+        recommendation_id: recommendation.id,
+        action: recommendation.action,
+        smile_phase: recommendation.smile_phase,
+        status: actionStatus,
+      });
+
+      if (actionStatus === "accepted") {
+        await api.updateGoal(goal.id, { smile_phase: recommendation.smile_phase });
+        onGoalUpdated?.();
+        showToast(`Goal phase successfully advanced to ${PHASE_LABELS[recommendation.smile_phase]}!`, "success");
+      } else {
+        showToast("Recommendation dismissed.", "info");
+      }
+      setRecommendation(null);
+      setShowRecCard(false);
+    } catch (err) {
+      console.error("Failed to record feedback:", err);
+      showToast(err.message || "Failed to submit feedback.", "error");
+    }
+  };
 
   const getScoreClass = (s) => {
     if (s >= 4.5) return "priority-high";
@@ -147,8 +222,182 @@ export const GoalCard = ({ goal, onGoalUpdated, isAdminView, usersMap = {} }) =>
       )}
 
       <p className="goal-desc">
-        {goal.description || "No description provided."}
+        {cleanDescription || "No description provided."}
       </p>
+
+      {githubRepo && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "rgba(255, 255, 255, 0.03)",
+          border: "1px solid rgba(255, 255, 255, 0.06)",
+          borderRadius: "10px",
+          padding: "10px 14px",
+          margin: "14px 0",
+          fontSize: "0.85rem",
+          boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.05)",
+          flexWrap: "wrap",
+          gap: "10px"
+        }}>
+          <span style={{ display: "flex", alignItems: "center", gap: "8px", color: "rgba(255, 255, 255, 0.85)" }}>
+            <span style={{ fontSize: "1.1rem" }}>📁</span>
+            <span>
+              <strong>GitHub:</strong> <a href={`https://github.com/${githubRepo}`} target="_blank" rel="noopener noreferrer" style={{ color: "#fbbf24", textDecoration: "none", fontWeight: "600" }}>{githubRepo}</a>
+            </span>
+          </span>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              onClick={handleSyncSignals}
+              disabled={isSyncing}
+              style={{
+                background: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                color: "#e2e8f0",
+                borderRadius: "8px",
+                padding: "6px 12px",
+                cursor: isSyncing ? "not-allowed" : "pointer",
+                fontSize: "0.8rem",
+                fontWeight: "600",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                transition: "all 0.2s ease"
+              }}
+            >
+              {isSyncing ? (
+                <>
+                  <span className="button-spinner" />
+                  <span>Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <span>🔄</span>
+                  <span>Sync Signals</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleGetRecommendation}
+              disabled={isGettingRec}
+              style={{
+                background: "linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(109, 40, 217, 0.3) 100%)",
+                border: "1px solid rgba(139, 92, 246, 0.6)",
+                color: "#c4b5fd",
+                borderRadius: "8px",
+                padding: "6px 12px",
+                cursor: isGettingRec ? "not-allowed" : "pointer",
+                fontSize: "0.8rem",
+                fontWeight: "600",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                boxShadow: "0 2px 8px rgba(139, 92, 246, 0.15)",
+                transition: "all 0.2s ease"
+              }}
+              onMouseOver={(e) => { if (!isGettingRec) e.currentTarget.style.border = "1px solid #8b5cf6"; }}
+              onMouseOut={(e) => { if (!isGettingRec) e.currentTarget.style.border = "1px solid rgba(139, 92, 246, 0.6)"; }}
+            >
+              {isGettingRec ? (
+                <>
+                  <span className="button-spinner" />
+                  <span>AI Reasoning...</span>
+                </>
+              ) : (
+                <>
+                  <span>✨</span>
+                  <span>Get AI Recommendation</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showRecCard && recommendation && (
+        <div style={{
+          background: "rgba(139, 92, 246, 0.04)",
+          border: "1px solid rgba(139, 92, 246, 0.2)",
+          borderRadius: "12px",
+          padding: "16px",
+          margin: "16px 0",
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.2)",
+          backdropFilter: "blur(5px)"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{
+              background: "rgba(139, 92, 246, 0.15)",
+              color: "#a78bfa",
+              border: "1px solid rgba(139, 92, 246, 0.3)",
+              padding: "4px 8px",
+              borderRadius: "8px",
+              fontSize: "0.7rem",
+              fontWeight: "700",
+              textTransform: "uppercase"
+            }}>
+              💡 AI Phase Advancement Card
+            </span>
+            <span style={{ fontSize: "0.75rem", color: "#fbbf24", fontWeight: "600" }}>
+              🔥 Priority Score: {Number(recommendation.priority || 3.0).toFixed(2)}
+            </span>
+          </div>
+          
+          <h4 style={{ color: "#fff", margin: 0, fontSize: "0.95rem", fontWeight: "700", lineHeight: 1.4 }}>
+            {recommendation.action}
+          </h4>
+
+          {recommendation.reasoning && (
+            <div style={{
+              background: "rgba(0, 0, 0, 0.2)",
+              border: "1px solid rgba(255, 255, 255, 0.03)",
+              borderRadius: "8px",
+              padding: "10px 12px",
+              fontSize: "0.8rem",
+              color: "rgba(255, 255, 255, 0.7)",
+              lineHeight: 1.5
+            }}>
+              <strong>Reasoning:</strong> {recommendation.reasoning}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+            <button
+              onClick={() => handleRecFeedback("accepted")}
+              style={{
+                flex: 1,
+                background: "#10b981",
+                border: "none",
+                color: "#fff",
+                borderRadius: "6px",
+                padding: "8px",
+                cursor: "pointer",
+                fontSize: "0.8rem",
+                fontWeight: "600"
+              }}
+            >
+              ✓ Accept Recommendation
+            </button>
+            <button
+              onClick={() => handleRecFeedback("dismissed")}
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "#ccc",
+                borderRadius: "6px",
+                padding: "8px 12px",
+                cursor: "pointer",
+                fontSize: "0.8rem",
+                fontWeight: "600"
+              }}
+            >
+              ✕ Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="smile-stepper">
         {PHASE_SEQUENCE.map((phase, idx) => {

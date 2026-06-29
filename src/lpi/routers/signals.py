@@ -211,6 +211,10 @@ def list_signals(
             "total row count does NOT affect query speed."
         ),
     ),
+    goal_id: str | None = Query(
+        default=None,
+        description="Filter by goal ID",
+    ),
     fetch_all: bool = Query(False, alias="all"),
     user_context: UserContext = Depends(get_current_user_context),
 ) -> list[Signal]:
@@ -259,6 +263,7 @@ def list_signals(
         end=end,
         limit=limit,
         offset=offset,
+        goal_id=goal_id,
     )
 
 
@@ -321,11 +326,20 @@ async def sync_github_events(
             detail=f"Goal {goal_id} not found",
         )
 
+    from lpi.routers.github_auth import token_db
+    
     url = f"https://api.github.com/repos/{repo_name}/events"
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+    }
+    
+    access_token = token_db.get(user_id)
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
 
     # 1. Fetch live data from GitHub
     async with httpx.AsyncClient() as client:
-        response = await client.get(url)
+        response = await client.get(url, headers=headers)
 
     if response.status_code != 200:
         raise HTTPException(

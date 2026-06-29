@@ -44,11 +44,12 @@ export const createGoalApi = (baseUrl) => {
       return await response.json();
     },
 
-    async getSignals({ stream, event_type, source, limit = 50, offset = 0 } = {}) {
+    async getSignals({ stream, event_type, source, goal_id, limit = 50, offset = 0 } = {}) {
       const params = new URLSearchParams();
       if (stream)     params.set("stream", stream);
       if (event_type) params.set("event_type", event_type);
       if (source)     params.set("source", source);
+      if (goal_id)    params.set("goal_id", goal_id);
       params.set("limit", limit);
       params.set("offset", offset);
       const response = await fetch(`${BASE_URL}/api/v1/signals/?${params}`, {
@@ -58,11 +59,12 @@ export const createGoalApi = (baseUrl) => {
       return await response.json();
     },
 
-    async getAllSignals({ stream, event_type, source, limit = 50, offset = 0 } = {}) {
+    async getAllSignals({ stream, event_type, source, goal_id, limit = 50, offset = 0 } = {}) {
       const params = new URLSearchParams();
       if (stream)     params.set("stream", stream);
       if (event_type) params.set("event_type", event_type);
       if (source)     params.set("source", source);
+      if (goal_id)    params.set("goal_id", goal_id);
       params.set("limit", limit);
       params.set("offset", offset);
       params.set("all", "true");
@@ -70,6 +72,18 @@ export const createGoalApi = (baseUrl) => {
         headers: getHeaders(),
       });
       if (!response.ok) throw new Error("Failed to fetch all signals");
+      return await response.json();
+    },
+
+    async syncGithubEvents(goalId, repoName) {
+      const response = await fetch(`${BASE_URL}/api/v1/signals/sync-github/${goalId}?repo_name=${encodeURIComponent(repoName)}`, {
+        method: "POST",
+        headers: getHeaders(),
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to sync GitHub events");
+      }
       return await response.json();
     },
 
@@ -151,6 +165,17 @@ export const createGoalApi = (baseUrl) => {
       return await response.json();
     },
 
+    async validatePublicRepo(owner, repo) {
+      const response = await fetch(`${BASE_URL}/api/v1/github/validate-public-repo/${owner}/${repo}`, {
+        headers: getHeaders(),
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to validate repository");
+      }
+      return await response.json();
+    },
+
     async trackGithubRepository(userId, repoOwner, repoName) {
       const response = await fetch(`${BASE_URL}/api/v1/github/track-repo`, {
         method: "POST",
@@ -204,6 +229,18 @@ export const createGoalApi = (baseUrl) => {
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.detail || "Failed to fetch recommendations");
+      }
+      return await response.json();
+    },
+
+    async getRecommendationsByGoal(userId, goalId) {
+      const response = await fetch(`${BASE_URL}/api/v1/recommendations/${userId}/by-goal/${goalId}`, {
+        method: "POST",
+        headers: getHeaders(),
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to fetch per-goal recommendations");
       }
       return await response.json();
     },

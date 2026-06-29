@@ -65,6 +65,17 @@ async def github_webhook_receiver(request: Request):
             print(f"⚠️ Webhook received for unregistered repo '{repo_full_name}', skipping save.")
             return {"status": "success"}
 
+        # Auto-detect matching goal linked to this repository
+        target_goal_id = None
+        try:
+            active_goals = store.list_goals(user_id=user_id)
+            for g in active_goals:
+                if repo_full_name.lower() in (g.description or "").lower():
+                    target_goal_id = g.id
+                    break
+        except Exception as e:
+            print(f"Goal lookup failed during webhook receive: {e}")
+
         signal = Signal(
             id=str(uuid.uuid4()),
             user_id=user_id,
@@ -73,8 +84,9 @@ async def github_webhook_receiver(request: Request):
             source="github_webhook",
             payload=signal_data["payload"],
             timestamp=datetime.now(UTC),
+            goal_id=target_goal_id,
         )
         store.insert_signal(signal)
-        print(f"✅ AUTOMATIC DETECTION: Saved {signal_data['event_type']} for user {user_id}!")
+        print(f"✅ AUTOMATIC DETECTION: Saved {signal_data['event_type']} for user {user_id} and goal {target_goal_id}!")
 
     return {"status": "success"}

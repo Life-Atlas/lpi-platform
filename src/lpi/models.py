@@ -218,3 +218,91 @@ class RecommendationFeedback(RecommendationFeedbackCreate):
     id: str
     user_id: str
     created_at: datetime
+
+
+# ── Team Metrics models ( Engineering Velocity & Inactivity) ──────
+#
+# Owner: Adil Islam. QA: Daksh Garg.
+#
+# These back GET /api/v1/metrics/team (routers/metrics.py). The shapes here
+# intentionally mirror the spec sheet's nested structure 1:1 so the frontend
+# can deserialise the JSON response directly into matching objects without
+# any field-renaming glue code.
+
+
+class TeamSummary(BaseModel):
+    """Top-level aggregate counters — the "at a glance" numbers for the
+    team dashboard's header row.
+
+    avg_signals_per_active_user is total_signals / active_users (NOT
+    total_signals / every roster member) — an inactive user contributing
+    zero recent signals shouldn't drag down the "how productive is an
+    engaged engineer right now" number. Rounded to 2 decimals; 0.0 when
+    there are no active users (avoids a ZeroDivisionError on a quiet day).
+    """
+
+    total_signals: int
+    active_users: int
+    inactive_users: int
+    avg_signals_per_active_user: float
+    total_pr_merges: int
+    total_commits: int
+
+
+class UserVelocity(BaseModel):
+    """Per-user breakdown of engineering activity.
+
+    goal_advances counts only FORWARD SMILE phase transitions (see
+    smile.PHASE_ORDER). A backward "re-evaluation" move is explicitly
+    allowed by validate_phase_transition() and is real LPI usage, but it
+    isn't "velocity" in the forward-progress sense this metric is named for.
+
+    last_active is the max timestamp across that user's signals, goal
+    updates, and phase transitions — so a user who only works through
+    goals (no GitHub signals yet) still shows up as active.
+
+    streams is the sorted set of distinct `stream` values seen in that
+    user's signals (e.g. ["lpi", "boardy"]) — a quick "what are they
+    touching" glance without opening the full signal list.
+    """
+
+    signal_count: int
+    pr_merges: int
+    commits: int
+    goal_advances: int
+    last_active: datetime | None
+    streams: list[str]
+
+
+class InactiveUserDetail(BaseModel):
+    """One row of the inactive_users[] breakdown.
+
+    days_inactive is computed as (now - last_seen).days — a whole-day
+    count, not a precise duration, since "how many days has this person
+    gone quiet" is the question a team lead actually asks.
+    """
+
+    user_id: str
+    days_inactive: int
+    last_seen: datetime | None
+
+
+class GoalsSummary(BaseModel):
+    """Portfolio-wide goal counts, independent of who owns each goal.
+
+    by_phase is zero-filled for all 6 SmilePhase values up front (not just
+    the phases that happen to have goals right now) so the frontend can
+    render a consistent 6-bar chart without defensive `.get(key, 0)` calls.
+    """
+
+    total_goals: int
+    by_phase: dict[str, int]
+
+
+class TeamMetrics(BaseModel):
+    """Full response body for GET /api/v1/metrics/team."""
+
+    team_summary: TeamSummary
+    per_user_velocity: dict[str, UserVelocity]
+    inactive_users: list[InactiveUserDetail]
+    goals_summary: GoalsSummary    

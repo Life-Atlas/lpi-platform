@@ -326,12 +326,14 @@ function App() {
           onIngestSignal={handleIngestSignal}
           isAdminView={activeTab === "admin_signals"}
           usersMap={usersMap}
+          goals={goals}
         />
       ) : (
         <GoalsList
           apiBase={API_BASE}
           isAdminView={activeTab === "admin"}
           usersMap={usersMap}
+          userId={session?.user?.id}
           goals={activeTab === "admin"
             ? goals
             : activeTab === "active" 

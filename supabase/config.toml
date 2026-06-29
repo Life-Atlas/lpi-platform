@@ -12,4 +12,4 @@ enable_signup = true
 # Require email confirmation locally too, matching production behavior.
 # Confirmation emails are caught by the local Mailpit inbox (no real SMTP
 # needed) — view them at http://127.0.0.1:54324
-enable_confirmations = true
+enable_confirmations = false

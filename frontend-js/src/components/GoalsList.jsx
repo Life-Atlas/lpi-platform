@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { goalApi } from "../api";
 import { GoalCard } from "./GoalCard";
 
-export const GoalsList = ({ goals: goalsProp, onGoalUpdated, apiBase, isAdminView, usersMap = {} }) => {
+export const GoalsList = ({ goals: goalsProp, onGoalUpdated, apiBase, isAdminView, usersMap = {}, userId }) => {
   const isControlled = goalsProp !== undefined;
   const [goals, setGoals] = useState(isControlled ? goalsProp : []);
   const [loading, setLoading] = useState(!isControlled);
@@ -72,6 +72,7 @@ export const GoalsList = ({ goals: goalsProp, onGoalUpdated, apiBase, isAdminVie
                 apiBase={apiBase}
                 isAdminView={isAdminView}
                 usersMap={usersMap}
+                userId={userId}
               />
             ))}
           </div>

@@ -115,6 +115,21 @@ def unauthenticated_client() -> TestClient:
     """FastAPI test client without Authorization header."""
     return TestClient(app)
 
+@pytest.fixture
+def admin_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """FastAPI test client whose JWT subject is treated as an admin.
+
+    Reuses TEST_USER_ID's token but flips settings.admin_user_ids so
+    get_current_user_context() resolves is_admin=True for the duration of
+    this test only (monkeypatch auto-reverts after the test). Needed for
+    any endpoint gated like GET /api/v1/users/map or
+    GET /api/v1/metrics/team.
+    """
+    monkeypatch.setattr(settings, "admin_user_ids", TEST_USER_ID)
+    test_client = TestClient(app)
+    test_client.headers.update({"Authorization": f"Bearer {_make_token()}"})
+    return test_client
+
 
 @pytest.fixture
 def sample_goal() -> dict:

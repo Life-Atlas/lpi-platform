@@ -128,7 +128,10 @@ function TimelineSignalCard({ signal, isAdminView, usersMap }) {
             <StreamBadge stream={signal.stream} />
             {signal.stream === "github" && signal.payload?.repo && (
               <span className="source-badge" style={{ background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)", color: "#e2e8f0", textTransform: "none" }}>
-                📁 {signal.payload.repo.split("/").pop()}
+                📁 {typeof signal.payload.repo === "string" 
+                  ? signal.payload.repo.split("/").pop() 
+                  : (signal.payload.repo.name || signal.payload.repo.full_name || JSON.stringify(signal.payload.repo))
+                }
               </span>
             )}
             <span className="timeline-card-title">{signal.event_type}</span>
@@ -187,6 +190,7 @@ export function SignalsView({
   onIngestSignal,
   isAdminView,
   usersMap = {},
+  goals = [],
 }) {
   const [filterStream, setFilterStream] = useState("");
   const [filterSource, setFilterSource] = useState("");
@@ -331,31 +335,14 @@ export function SignalsView({
       return new Date(s.timestamp).getTime();
     };
 
-    const storageKey = userId ? `tracked_repos_${userId}` : "tracked_repos";
-    const trackedRepos = JSON.parse(localStorage.getItem(storageKey) || "[]").map(
-      (name) => name.toLowerCase()
-    );
-
     return signals
       .filter((s) => {
-        if (s.stream === "github" && !isAdminView) {
-          const repoName = s.payload?.repo ? s.payload.repo.toLowerCase() : "";
-          if (repoName) {
-            const isMatch = trackedRepos.some(
-              (tracked) =>
-                tracked === repoName ||
-                tracked.endsWith("/" + repoName) ||
-                repoName.endsWith("/" + tracked)
-            );
-            if (!isMatch) return false;
-          }
-        }
         if (filterStream && s.stream !== filterStream) return false;
         if (filterSource && s.source !== filterSource) return false;
         return true;
       })
       .sort((a, b) => getSignalTime(b) - getSignalTime(a));
-  }, [signals, filterStream, filterSource, userId, isAdminView]);
+  }, [signals, filterStream, filterSource]);
 
   // Group by date
   const groupedSignals = useMemo(() => {

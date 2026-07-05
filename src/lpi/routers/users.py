@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from lpi import store
 from lpi.middleware.auth import UserContext, get_current_user_context
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -27,6 +31,6 @@ def get_users_map(user_context: UserContext = Depends(get_current_user_context))
                 else "",
             }
         return users_map
-    except Exception as e:
-        print(f"Error fetching users: {e}")
+    except Exception:
+        logger.exception("Error fetching users")
         return {}

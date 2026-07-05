@@ -56,6 +56,7 @@ import json
 import logging
 from typing import TypedDict
 
+from lpi import cost_guard
 from lpi.config import settings
 from lpi.models import Goal, Signal
 
@@ -180,6 +181,9 @@ def _call_llm(prompt: str) -> str | None:
     """
     provider = (settings.llm_provider or "groq").lower().strip()
 
+    if not cost_guard.check_budget():
+        return None
+
     if provider == "anthropic":
         # ════════════════════════════════════════════════════════════════════
         # ANTHROPIC (Claude) — KEPT HERE, COMMENTED OUT.
@@ -222,6 +226,12 @@ def _call_llm(prompt: str) -> str | None:
             model=settings.llm_model,
             max_tokens=1000,
             messages=[{"role": "user", "content": prompt}],
+        )
+        usage = getattr(response, "usage", None)
+        cost_guard.record_usage(
+            "groq",
+            input_tokens=getattr(usage, "prompt_tokens", None),
+            output_tokens=getattr(usage, "completion_tokens", None),
         )
         return response.choices[0].message.content
     except Exception:

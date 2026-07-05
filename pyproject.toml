@@ -53,6 +53,9 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "unit: pure unit test — no Supabase required, always runs (bypasses the clear_store skip)",
+]
 filterwarnings = [
     "once::DeprecationWarning",
     "ignore:.*timeout.*:DeprecationWarning",

@@ -76,17 +76,24 @@ def _jwt_secret(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def clear_store() -> Generator[None, None, None]:
+def clear_store(request: pytest.FixtureRequest) -> Generator[None, None, None]:
     """Wipe all Supabase + in-memory state before and after every test.
 
     The `yield` splits setup (before) from teardown (after).
     Both sides are cleared so a failing test cannot pollute the next one.
 
     If Supabase is unreachable the fixture skips the test with a clear
-    message instead of raising a cryptic connection error. Tests that
-    only use in-memory scoring (test_scoring.py) create no Goals and
-    never call the store, so they run fine regardless.
+    message instead of raising a cryptic connection error.
+
+    Tests marked @pytest.mark.unit never touch the store — they bypass
+    both the availability check and the wipe, so they ALWAYS run (locally
+    and in CI) even with no Supabase. Without this, pure unit tests were
+    silently skipped alongside the integration tests.
     """
+    if request.node.get_closest_marker("unit"):
+        yield
+        return
+
     if not _supabase_available():
         pytest.skip("Local Supabase is not running. Start it with `supabase start` then re-run.")
 

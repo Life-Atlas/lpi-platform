@@ -1,3 +1,4 @@
+import os
 import random
 import uuid
 
@@ -7,8 +8,13 @@ import requests
 # Point this to the local ingest endpoint (e.g., "http://localhost:8000/api/v1/signals/")
 API_INGEST_URL = "http://localhost:8001/api/v1/signals/"
 
-# Enter the required JWT or dummy token to pass the auth middleware
-AUTH_TOKEN = "eyJhbGciOiJFUzI1NiIsImtpZCI6ImI4MTI2OWYxLTIxZDgtNGYyZS1iNzE5LWMyMjQwYTg0MGQ5MCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwOi8vMTI3LjAuMC4xOjU0MzIxL2F1dGgvdjEiLCJzdWIiOiI5MzY0ZjRiMS00NDc4LTQ4MjAtYjMwOC0wOGY5YmM4YWRhZTAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzgxNjY2NzU3LCJpYXQiOjE3ODE2NjMxNTcsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsInBob25lIjoiIiwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiZW1haWwiLCJwcm92aWRlcnMiOlsiZW1haWwiXX0sInVzZXJfbWV0YWRhdGEiOnsiZW1haWxfdmVyaWZpZWQiOnRydWV9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzgxNjYzMTU3fV0sInNlc3Npb25faWQiOiIzMmFjYWY1Zi04OGMyLTRhMzEtOWRkNi1lZTg3YjNlMWY1Y2IiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.c9hH6QP0_VBKiuZA7SEn4lMQikWSFYQQmN1fD3ad3GkzhcP9zcXZX45qdW7MFZ7fPAdlYkgG1k6lVnygO3lyTw"
+# JWT for the auth middleware — NEVER hardcode a token here (even a local
+# one trains bad habits and trips secret scanners). Export it instead:
+#   PowerShell: $env:LPI_TEST_JWT = "<token from supabase status / your login>"
+#   bash:       export LPI_TEST_JWT=<token>
+AUTH_TOKEN = os.environ.get("LPI_TEST_JWT", "")
+if not AUTH_TOKEN:
+    raise SystemExit("Set LPI_TEST_JWT env var before running this script.")
 
 HEADERS = {"Content-Type": "application/json", "Authorization": f"Bearer {AUTH_TOKEN}"}
 

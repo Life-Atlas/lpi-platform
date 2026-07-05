@@ -57,6 +57,7 @@ NOTE: the user_activity_logs CHECK constraint originally only allowed
       no try/except is needed at this call site.
 """
 
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -68,7 +69,9 @@ from lpi import store
 from lpi.middleware.auth import UserContext, get_current_user, get_current_user_context
 from lpi.models import Signal, SignalCreate
 from lpi.notifications import create_notification_if_new
-from lpi.utils.logging import log_user_activity, logger
+from lpi.utils.logging import log_user_activity
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -183,7 +186,7 @@ def ingest_signal(
         },
     )
 
-    print(new_signal.model_dump())
+    logger.debug("Signal created: %s", new_signal.model_dump())
     return new_signal
 
 

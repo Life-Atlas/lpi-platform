@@ -156,9 +156,11 @@ def log_transition(
         # below — same fix should be applied here as a follow-up (out of
         # scope for the signals audit-log bug this pass addresses).
         # Never let a logging failure break the update endpoint.
-        print(
-            f"[log_transition] WARNING: Supabase insert failed for "
-            f"goal {goal_id} ({from_phase}→{to_phase})"
+        logger.exception(
+            "[log_transition] Supabase insert failed for goal %s (%s→%s)",
+            goal_id,
+            from_phase,
+            to_phase,
         )
 
 
@@ -326,7 +328,9 @@ def log_system_event(
     except Exception:
         # NOTE: not yet migrated to logger.exception() — same follow-up as
         # log_transition() above, out of scope for this pass.
-        print(f"[log_system_event] WARNING: Supabase insert failed for event={event} level={level}")
+        logger.exception(
+            "[log_system_event] Supabase insert failed for event=%s level=%s", event, level
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════

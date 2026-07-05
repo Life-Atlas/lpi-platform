@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -8,6 +9,8 @@ from lpi import store
 from lpi.models import Signal
 from lpi.notifications import create_notification_if_new
 from lpi.routers.github_auth import repo_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -68,7 +71,7 @@ async def github_webhook_receiver(request: Request):
         user_id = repo_db.get(repo_full_name) if repo_full_name else None
 
         if not user_id:
-            print(f"⚠️ Webhook received for unregistered repo '{repo_full_name}', skipping save.")
+            logger.warning("Webhook received for unregistered repo %r, skipping save.", repo_full_name)
             return {"status": "success"}
 
         # Auto-detect matching goal linked to this repository
@@ -80,7 +83,7 @@ async def github_webhook_receiver(request: Request):
                     target_goal_id = g.id
                     break
         except Exception as e:
-            print(f"Goal lookup failed during webhook receive: {e}")
+            logger.exception("Goal lookup failed during webhook receive: %s", e)
 
         signal = Signal(
             id=str(uuid.uuid4()),
@@ -93,7 +96,12 @@ async def github_webhook_receiver(request: Request):
             goal_id=target_goal_id,
         )
         store.insert_signal(signal)
-        print(f"✅ AUTOMATIC DETECTION: Saved {signal_data['event_type']} for user {user_id} and goal {target_goal_id}!")
+        logger.info(
+            "Automatic detection: saved %s for user %s and goal %s",
+            signal_data["event_type"],
+            user_id,
+            target_goal_id,
+        )
 
         create_notification_if_new(
             user_id=user_id,

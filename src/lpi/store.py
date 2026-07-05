@@ -69,12 +69,15 @@ Run `supabase start` then `supabase db push` before running tests.
 The clear_all() helper wipes both tables between test runs.
 """
 
+import logging
 import threading
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from lpi.config import settings
 from lpi.models import Goal, RecommendationFeedback, Signal
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from supabase import Client  # type: ignore[attr-defined]
@@ -94,7 +97,7 @@ def _get_client() -> "Client":
     from supabase import create_client  # type: ignore[attr-defined]
 
     key = settings.supabase_service_role_key or settings.supabase_key
-    print("SUPABASE URL:", settings.supabase_url)
+    logger.debug("Supabase URL: %s", settings.supabase_url)
     if not key:
         raise RuntimeError(
             "Supabase service role key is required for backend writes. "
@@ -353,8 +356,8 @@ def get_user_email(user_id: str) -> str | None:
             # Ensure the return type strictly matches str | None
             return str(email) if email else None
         return None
-    except Exception as e:
-        print(f"Error fetching email for user {user_id}: {e}")
+    except Exception:
+        logger.exception("Error fetching email for user %s", user_id)
         return None
 
 def update_user_profile(user_id: str, updates: dict) -> dict | None:
@@ -365,8 +368,8 @@ def update_user_profile(user_id: str, updates: dict) -> dict | None:
             # Explicitly return a dict to satisfy the function signature
             return cast(dict, result.data[0])
         return None
-    except Exception as e:
-        print(f"Error updating profile for user {user_id}: {e}")
+    except Exception:
+        logger.exception("Error updating profile for user %s", user_id)
         return None
 
 # ── Audit log verification (new — used by tests, also useful for admin tooling) ─

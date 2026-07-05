@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from datetime import UTC, datetime
@@ -10,6 +11,8 @@ from pydantic import BaseModel
 from lpi import store
 from lpi.middleware.auth import get_current_user
 from lpi.models import Signal, SignalCreate
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -170,7 +173,11 @@ async def auto_register_webhook(request: TrackRepoRequest):
     is_success = response.status_code in [200, 201, 422]
 
     if not is_success:
-        print(f"⚠️ Webhook registration returned status {response.status_code} (likely no admin rights). Proceeding with historical sync.")
+        logger.warning(
+            "Webhook registration returned status %s (likely no admin rights). "
+            "Proceeding with historical sync.",
+            response.status_code,
+        )
 
     repo_db[f"{request.repo_owner}/{request.repo_name}"] = request.user_id
 
@@ -217,7 +224,7 @@ async def auto_register_webhook(request: TrackRepoRequest):
                                 target_goal_id = g.id
                                 break
                     except Exception as e:
-                        print(f"Goal lookup failed during tracking: {e}")
+                        logger.exception("Goal lookup failed during tracking: %s", e)
 
                     # Deduplicate: check if this event was already ingested
                     github_event_id = event.get("id")
@@ -247,7 +254,7 @@ async def auto_register_webhook(request: TrackRepoRequest):
                     store.insert_signal(new_signal)
                     ingested_count += 1
     except Exception as e:
-        print(f"Failed to fetch history for tracked repo: {e}")
+        logger.exception("Failed to fetch history for tracked repo: %s", e)
 
     return {
         "status": "success",
@@ -293,7 +300,11 @@ async def disconnect_github(request: DisconnectRepoRequest):
                     delete_url = f"{hooks_url}/{target_hook_id}"
                     await client.delete(delete_url, headers=headers)
     except Exception as e:
-        print(f"⚠️ Webhook deletion from GitHub failed (likely rate-limited), proceeding with local database cleanup: {e}")
+        logger.warning(
+            "Webhook deletion from GitHub failed (likely rate-limited), "
+            "proceeding with local database cleanup: %s",
+            e,
+        )
 
     # Step 3: Remove the token and repo mapping from our local mock DB
     if request.user_id in token_db:
@@ -312,7 +323,7 @@ async def disconnect_github(request: DisconnectRepoRequest):
         # 3. Clean up any historical webhook test signals with "github_api" source containing the repo name
         store._get_client().table("activity_signals").delete().eq("user_id", request.user_id).eq("source", "github_api").filter("payload->>repo", "eq", repo_full_name).execute()
     except Exception as e:
-        print(f"Failed to clean up signals on repo disconnect: {e}")
+        logger.exception("Failed to clean up signals on repo disconnect: %s", e)
 
     return {"status": "success", "message": f"Successfully disconnected from {request.repo_name}."}
 

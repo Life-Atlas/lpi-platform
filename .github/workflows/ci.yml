@@ -44,6 +44,18 @@ jobs:
         run: supabase start
       - name: Apply migrations
         run: supabase db reset
+      # The migrations contain zero GRANT statements — hosted Supabase's
+      # default privileges cover that in prod, a raw local stack does not.
+      # Grant here (CI-only) so service_role/anon/authenticated behave like
+      # they do on the hosted project.
+      - name: Grant role privileges (parity with hosted defaults)
+        run: |
+          DB_URL=$(supabase status -o env | grep '^DB_URL=' | cut -d= -f2- | tr -d '"')
+          psql "$DB_URL" -v ON_ERROR_STOP=1 \
+            -c "GRANT USAGE ON SCHEMA public TO service_role, anon, authenticated;" \
+            -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;" \
+            -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;" \
+            -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated;"
       - name: Export Supabase env for tests
         run: |
           supabase status -o env \

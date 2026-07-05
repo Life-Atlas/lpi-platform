@@ -40,8 +40,10 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - name: Start local Supabase (applies supabase/migrations)
+      - name: Start local Supabase
         run: supabase start
+      - name: Apply migrations
+        run: supabase db reset
       - name: Export Supabase env for tests
         run: |
           supabase status -o env \
@@ -54,6 +56,8 @@ jobs:
             echo "SUPABASE_JWT_SECRET=$JWT_SECRET"
           } >> "$GITHUB_ENV"
           rm sb.env
+      - name: Preflight — fail HERE with the real error if the store can't connect
+        run: python -c "from lpi import store; print('goals reachable:', store.list_goals() is not None)"
       - name: Test (full suite — fails if store-backed tests were skipped)
         run: |
           pytest tests/ -v --tb=short --junitxml=pytest-report.xml
